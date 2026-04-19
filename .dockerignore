@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.git
+# Não excluir *.wav/*.mp3 globalmente — a pasta voices/ é mapeada em volume
+# e pode conter arquivos necessários em tempo de build

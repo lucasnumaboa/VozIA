@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+backup/
+VozIA/
+*.wav
+*.mp3
+*.mp4
+*.ogg
+*.flac
+*.m4a

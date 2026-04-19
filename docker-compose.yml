@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: voice_assistant
+      MYSQL_USER: acore
+      MYSQL_PASSWORD: acore
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uacore", "-pacore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: acore
+      DB_PASS: acore
+      DB_NAME: voice_assistant
+      SECRET_KEY: "change-me-in-production"
+      VISION: "no"          # VISION=yes requer display (xvfb) e só funciona em Linux
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./templates:/app/templates   # hot-reload dos templates
+      - ./voices:/app/voices         # vozes enviadas pelo admin (persistidas no host)
+      - /dev/snd:/dev/snd            # microfone — APENAS em host Linux
+
+    # ⚠️  Remova o bloco 'devices' se o host for Windows/macOS
+    devices:
+      - /dev/snd:/dev/snd
+
+volumes:
+  db_data:
+  # voices é mapeado como bind-mount (./voices) — não precisa de named volume
