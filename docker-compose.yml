@@ -25,17 +25,16 @@ services:
     ports:
       - "${PORT:-9731}:${PORT:-9731}"
     environment:
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_USER: acore
-      DB_PASS: acore
-      DB_NAME: voice_assistant
-      SECRET_KEY: "change-me-in-production"
-      VISION: "no"          # VISION=yes requer display (xvfb) e só funciona em Linux
+      DB_HOST: "${DB_HOST:-host.docker.internal}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_USER: "${DB_USER:-acore}"
+      DB_PASS: "${DB_PASS:-acore}"
+      DB_NAME: "${DB_NAME:-voice_assistant}"
+      SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
+      VISION: "${VISION:-no}"
       PORT: "${PORT:-9731}"
-    depends_on:
-      db:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux: resolve host.docker.internal
     volumes:
       - ./templates:/app/templates   # hot-reload dos templates
       - ./voices:/app/voices         # vozes enviadas pelo admin (persistidas no host)
