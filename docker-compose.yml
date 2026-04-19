@@ -39,11 +39,9 @@ services:
     volumes:
       - ./templates:/app/templates   # hot-reload dos templates
       - ./voices:/app/voices         # vozes enviadas pelo admin (persistidas no host)
-      - /dev/snd:/dev/snd            # microfone — APENAS em host Linux
-
-    # ⚠️  Remova o bloco 'devices' se o host for Windows/macOS
-    devices:
-      - /dev/snd:/dev/snd
+    # Para passar o microfone no Linux, descomente as linhas abaixo:
+    # devices:
+    #   - /dev/snd:/dev/snd
 
 volumes:
   db_data:
