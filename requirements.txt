@@ -9,3 +9,4 @@ Pillow
 PyMySQL>=1.1.0
 werkzeug>=3.0.0
 pydub>=0.25.1
+packaging
