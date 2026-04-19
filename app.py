@@ -90,7 +90,7 @@ def broadcast(etype, data):
 # ── Load Silero VAD ─────────────────────────────────────────────────────────────
 print("Carregando Silero VAD...", flush=True)
 _vad_model, _ = torch.hub.load("snakers4/silero-vad", "silero_vad",
-                                force_reload=False, verbose=False)
+                                force_reload=False, verbose=False, trust_repo=True)
 _vad_model.eval()
 print("VAD pronto.", flush=True)
 
