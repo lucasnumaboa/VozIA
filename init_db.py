@@ -4,25 +4,43 @@ Usage:  python init_db.py
 """
 import glob
 import os
+import time
 import pymysql
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 
 load_dotenv()
 
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = int(os.getenv("DB_PORT", 3306))
-DB_USER = os.getenv("DB_USER", "acore")
-DB_PASS = os.getenv("DB_PASS", "acore")
-DB_NAME = os.getenv("DB_NAME", "voice_assistant")
 
-_BASE = dict(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASS,
-             charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
+def _get_base():
+    return dict(
+        host=os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT", 3306)),
+        user=os.getenv("DB_USER", "acore"),
+        password=os.getenv("DB_PASS", "acore"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+
+
+def _connect_with_retry(retries=10, delay=3):
+    """Tenta conectar ao MySQL com retries (util no startup do Docker)."""
+    base = _get_base()
+    print(f"  [db] Conectando a {base['host']}:{base['port']} ...", flush=True)
+    for attempt in range(1, retries + 1):
+        try:
+            return pymysql.connect(**base)
+        except pymysql.err.OperationalError as e:
+            if attempt == retries:
+                raise
+            print(f"  [db] Tentativa {attempt}/{retries} falhou: {e} — aguardando {delay}s...", flush=True)
+            time.sleep(delay)
 
 
 def init_db():
+    DB_NAME = os.getenv("DB_NAME", "voice_assistant")
     # 1. Create DB if missing
-    conn = pymysql.connect(**_BASE)
+    conn = _connect_with_retry()
     with conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -32,7 +50,7 @@ def init_db():
     print(f"[DB] Banco '{DB_NAME}' verificado/criado.")
 
     # 2. Connect to DB and create tables
-    conn = pymysql.connect(**{**_BASE, "database": DB_NAME})
+    conn = pymysql.connect(**{**_get_base(), "database": DB_NAME})
     with conn:
         with conn.cursor() as cur:
             cur.execute("""
