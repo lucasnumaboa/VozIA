@@ -92,6 +92,39 @@
                        letter-spacing:1px; margin-bottom:6px; }
     .info-box .content { color:#ddd; }
 
+    /* ── Error Toast ─────────────────────────────────────── */
+    .error-toast {
+      position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+      background:#1e0a0a; border:1px solid #7a2020; border-radius:12px;
+      padding:14px 20px; min-width:300px; max-width:520px; width:90%;
+      box-shadow:0 8px 32px rgba(0,0,0,.6);
+      display:flex; align-items:flex-start; gap:12px;
+      opacity:0; pointer-events:none;
+      transition:opacity .25s, transform .25s;
+      z-index:9999;
+    }
+    .error-toast.show {
+      opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0);
+    }
+    .error-toast .et-icon { font-size:1.3rem; flex-shrink:0; margin-top:1px; }
+    .error-toast .et-body { flex:1; }
+    .error-toast .et-api  {
+      font-size:0.75rem; text-transform:uppercase; letter-spacing:1px;
+      color:#f77; font-weight:700; margin-bottom:3px;
+    }
+    .error-toast .et-status { display:inline-block; font-size:0.7rem;
+      background:#3a1212; border:1px solid #7a2020; border-radius:4px;
+      padding:1px 7px; color:#ff9090; margin-left:6px; vertical-align:middle;
+    }
+    .error-toast .et-detail { font-size:0.82rem; color:#cc9090; margin-top:4px;
+      word-break:break-word; max-height:80px; overflow-y:auto;
+    }
+    .error-toast .et-close {
+      background:none; border:none; color:#666; cursor:pointer;
+      font-size:1.1rem; padding:0; flex-shrink:0; line-height:1;
+    }
+    .error-toast .et-close:hover { color:#ccc; }
+
     /* ── Admin Modal ─────────────────────────────────────── */
     .modal-overlay {
       display:none; position:fixed; inset:0;
@@ -218,6 +251,16 @@
     {% endif %}
     <a href="/logout" class="btn-logout">Sair</a>
   </div>
+</div>
+
+<!-- Error Toast -->
+<div class="error-toast" id="errorToast">
+  <span class="et-icon">⚠️</span>
+  <div class="et-body">
+    <div class="et-api" id="toastApi"></div>
+    <div class="et-detail" id="toastDetail"></div>
+  </div>
+  <button class="et-close" onclick="closeToast()">✕</button>
 </div>
 
 <!-- Main -->
@@ -442,10 +485,32 @@ function startSSE() {
     if (type === 'status')     { setStatus(data); }
     if (type === 'transcript') { document.getElementById('transcriptTxt').textContent = data; }
     if (type === 'ai_text')    { document.getElementById('aiTxt').textContent = data; }
-    if (type === 'error')      { statusTxt.textContent = 'erro: ' + data; }
+    if (type === 'error')      { showToast(data); }
     if (type === 'audio_chunk') { handleAudioChunk(data); }
     if (type === 'status' && (data === 'recording' || data === 'processing')) { resetAudioPlayer(); }
   };
+}
+
+// ── Error Toast ──────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(err) {
+  const toast  = document.getElementById('errorToast');
+  const apiEl  = document.getElementById('toastApi');
+  const detEl  = document.getElementById('toastDetail');
+  if (typeof err === 'object' && err !== null) {
+    apiEl.innerHTML = err.api
+      + (err.status ? `<span class="et-status">HTTP ${err.status}</span>` : '');
+    detEl.textContent = err.detail || '';
+  } else {
+    apiEl.textContent = 'Erro';
+    detEl.textContent = String(err);
+  }
+  toast.classList.add('show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(closeToast, 10000);
+}
+function closeToast() {
+  document.getElementById('errorToast').classList.remove('show');
 }
 
 // ── Audio chunk player ───────────────────────────────────────────────────────────

@@ -156,7 +156,7 @@ def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_pa
         _log("Whisper", r.status_code, time.time() - t0)
         if cancelled(): return
         if r.status_code != 200:
-            broadcast("error", f"Whisper {r.status_code}: {r.text[:200]}"); return
+            broadcast("error", {"api": "Whisper", "status": r.status_code, "detail": r.text[:300]}); return
         transcript = r.json().get("text", "").strip()
         if not transcript:
             print("  [!] Transcrição vazia", flush=True); return
@@ -202,7 +202,7 @@ def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_pa
              f"model={provider['model']}  vision={vision_on}")
         if cancelled(): return
         if r.status_code != 200:
-            broadcast("error", f"LLM {r.status_code}: {r.text[:200]}"); return
+            broadcast("error", {"api": "LLM", "status": r.status_code, "detail": r.text[:300]}); return
 
         rj  = r.json(); raw = rj.get("output", "")
         if isinstance(raw, list):
@@ -235,6 +235,9 @@ def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_pa
                     )
                 t_gen = time.time() - t0
                 _log(f"Voice [{i+1}/{total}]", r.status_code, t_gen, f'words={len(part.split())}')
+                if r.status_code != 200:
+                    broadcast("error", {"api": "Voice API", "status": r.status_code, "detail": r.text[:300]})
+                    break
                 if r.status_code == 200:
                     chunk_b64 = r.json().get("audio_base64")
                     if chunk_b64:
