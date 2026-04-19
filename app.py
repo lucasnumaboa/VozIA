@@ -525,4 +525,5 @@ def events():
 if __name__ == "__main__":
     from init_db import init_db
     init_db()
-    app.run(debug=False, port=5000, threaded=True)
+    port = int(os.getenv("PORT", 5000))
+    app.run(debug=False, port=port, threaded=True)

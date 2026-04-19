@@ -23,7 +23,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "${PORT:-9731}:${PORT:-9731}"
     environment:
       DB_HOST: db
       DB_PORT: "3306"
@@ -32,6 +32,7 @@ services:
       DB_NAME: voice_assistant
       SECRET_KEY: "change-me-in-production"
       VISION: "no"          # VISION=yes requer display (xvfb) e só funciona em Linux
+      PORT: "${PORT:-9731}"
     depends_on:
       db:
         condition: service_healthy

@@ -80,6 +80,7 @@ DB_PASS=acore
 DB_NAME=voice_assistant
 SECRET_KEY=troque-aqui
 VISION=no
+PORT=9731
 ```
 
 ### 3. Inicializar o banco
@@ -211,6 +212,7 @@ cd OmniVoice-API
 | `DB_NAME`   | `voice_assistant` | Nome do banco |
 | `SECRET_KEY`| `change-me`   | Chave de sessão Flask |
 | `VISION`    | `no`          | Habilita captura de tela (`yes`/`no`) |
+| `PORT`      | `9731`        | Porta HTTP do servidor Flask |
 
 ---
 
