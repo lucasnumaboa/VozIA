@@ -236,47 +236,76 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
         broadcast("ai_text", ai_text)
         if cancelled(): return
 
-        # 3 ── Voice (streaming chunks + adaptive buffer) ─────────────────────
-        ref = voice_path or cfg.get("voice_ref_audio", "")
-        if ref and os.path.exists(ref):
-            tts_parts  = split_tts_chunks(ai_text)
-            total      = len(tts_parts)
-            start_after = 1          # default; recalculated after first chunk
+        # 3 ── Voice ────────────────────────────────────────────────────────
+        ref       = voice_path or cfg.get("voice_ref_audio", "")
+        voice_url = cfg.get("voice_url", "")
+        if ref and os.path.exists(ref) and voice_url:
+            tts_parts = split_tts_chunks(ai_text, words_per_chunk=20)
+            total     = len(tts_parts)
+            language  = cfg.get("language", "Portuguese")
+            num_step  = int(cfg.get("num_step", 10))
+            speed     = float(cfg.get("speed", 1.0))
             print(f"  [tts] {total} chunk(s)", flush=True)
-            for i, part in enumerate(tts_parts):
-                if cancelled(): break
+
+            if total == 1:
+                # ── Single chunk: original endpoint ─────────────────────────
                 t0 = time.time()
                 with open(ref, "rb") as fref:
                     r = requests.post(
-                        cfg.get("voice_url", ""),
-                        data={"text": part, "language": cfg.get("language", "Portuguese"),
-                              "num_step": cfg.get("num_step", "10"),
-                              "speed":    cfg.get("speed", "1.0")},
+                        voice_url,
+                        data={"text": tts_parts[0], "language": language,
+                              "num_step": num_step, "speed": speed},
                         files={"ref_audio": ("ref.wav", fref, "audio/wav")},
                         timeout=90,
                     )
                 t_gen = time.time() - t0
-                _log(f"Voice [{i+1}/{total}]", r.status_code, t_gen, f'words={len(part.split())}')
+                _log("Voice [1/1]", r.status_code, t_gen,
+                     f'words={len(tts_parts[0].split())}')
                 if r.status_code != 200:
-                    broadcast("error", {"api": "Voice API", "status": r.status_code, "detail": r.text[:300]})
-                    break
-                if r.status_code == 200:
-                    chunk_b64 = r.json().get("audio_base64")
+                    broadcast("error", {"api": "Voice API",
+                                        "status": r.status_code, "detail": r.text[:300]})
+                else:
+                    chunk_b64 = r.json().get("audio_base64", "")
                     if chunk_b64:
-                        if i == 0:
-                            # Adaptive: how many chunks must be buffered before playback?
-                            # buffer_needed = ceil(t_gen / play_duration) + 1 safety margin
-                            play_dur   = _wav_duration(chunk_b64)
-                            start_after = min(total, max(1, math.ceil(t_gen / max(play_dur, 0.01)) + 1))
-                            print(f"  [tts] t_gen={t_gen:.2f}s play={play_dur:.2f}s "
-                                  f"→ start_after={start_after}", flush=True)
                         broadcast("audio_chunk", {
-                            "index":       i,
-                            "total":       total,
-                            "audio":       chunk_b64,
-                            "last":        i == total - 1,
-                            "start_after": start_after if i == 0 else None,
+                            "index": 0, "total": 1, "audio": chunk_b64,
+                            "last": True, "start_after": 1,
                         })
+            else:
+                # ── Multiple chunks: batch endpoint ──────────────────────────
+                batch_url = voice_url.rstrip("/") + "/batch"
+                items     = [{"text": p, "language": language, "speed": speed}
+                             for p in tts_parts]
+                t0 = time.time()
+                with open(ref, "rb") as fref:
+                    r = requests.post(
+                        batch_url,
+                        data={"items":      json.dumps(items),
+                              "batch_size": min(total, 4),
+                              "num_step":   num_step,
+                              "denoise":    "true"},
+                        files={"ref_audio": ("ref.wav", fref, "audio/wav")},
+                        timeout=300,
+                    )
+                t_gen = time.time() - t0
+                _log(f"Voice batch [{total}]", r.status_code, t_gen,
+                     f'chunks={total}')
+                if r.status_code != 200:
+                    broadcast("error", {"api": "Voice API",
+                                        "status": r.status_code, "detail": r.text[:300]})
+                else:
+                    results = r.json().get("results", [])
+                    for i, item_res in enumerate(results):
+                        if cancelled(): break
+                        chunk_b64 = item_res.get("audio_base64", "")
+                        if chunk_b64:
+                            broadcast("audio_chunk", {
+                                "index":       i,
+                                "total":       total,
+                                "audio":       chunk_b64,
+                                "last":        i == total - 1,
+                                "start_after": 1 if i == 0 else None,
+                            })
 
         print(f"  [<<] {time.time()-t_total:.2f}s total\n{'─'*52}", flush=True)
 
