@@ -4,18 +4,20 @@
 
 # VozIA — Assistente de Voz com IA em Tempo Real
 
-Assistente de voz em tempo real com detecção de atividade vocal (VAD), transcrição via Whisper, resposta via LLM e síntese de voz via API de conversão de voz. Interface web com autenticação, painel admin e suporte a múltiplos provedores de IA.
+Assistente de voz em tempo real com detecção de atividade vocal (VAD) **no browser do usuário**, transcrição via Whisper, resposta via LLM e síntese de voz via API de conversão de voz. Interface web com autenticação, painel admin, suporte a múltiplos provedores de IA e sistema de agente personalizado com wake word.
 
 ---
 
 ## ✨ Funcionalidades
 
-- **VAD com Silero** — detecta automaticamente quando o usuário começa e termina de falar, acumulando o áudio entre pausas curtas e enviando apenas ao detectar silêncio sustentado (~1.8s)
+- **VAD no browser** — captura e detecção de voz via `Web Audio API` + `ScriptProcessorNode` diretamente no browser do usuário; áudio codificado como WAV PCM16 e enviado ao servidor — **sem dependência de microfone no servidor**
+- **Agente personalizado + wake word** — cada usuário dá um nome ao seu agente (ex: Jarvis). O assistente só responde quando o nome é detectado na transcrição; tolerante a erros do Whisper via matching fuzzy (≥ 75% de similaridade)
+- **Saudação personalizada** — exibe "Olá, {usuário}! No que {agente} pode lhe ajudar hoje?" acima do botão de início
 - **Whisper** — transcrição do áudio capturado (modelo configurável)
 - **Multi-provider LLM** — suporte a OpenAI, DeepSeek, Anthropic, Google Gemini, Moonshot, MiniMax, OpenRouter, Ollama e qualquer API compatível com OpenAI
 - **Vision** — captura screenshot da tela e envia junto com a pergunta (flag `VISION=yes` no `.env`)
 - **Voice conversion com streaming** — converte a resposta da IA em áudio e reproduz em chunks progressivos, com algoritmo adaptativo de buffer (veja detalhes abaixo)
-- **Gerenciamento de vozes** — upload de arquivos em qualquer formato (mp3, mp4, ogg, flac…), convertidos automaticamente para WAV
+- **Gerenciamento de vozes** — upload de `.wav` (cópia direta, sem conversão) ou outros formatos (mp3, ogg…) convertidos automaticamente para WAV via pydub/ffmpeg
 - **SSE** — eventos em tempo real (status, transcrição, resposta, áudio) para o frontend
 - **Autenticação** — login com sessão; suporte a múltiplos usuários
 - **Painel Admin** — gerenciamento de configurações, provedores, vozes e usuários via interface web
@@ -60,9 +62,9 @@ real-time/
 
 - Python 3.11+
 - MySQL 8.0+ (usuário `acore`, senha `acore`, banco `voice_assistant`)
-- **ffmpeg** instalado no PATH (necessário para conversão de formatos de áudio via pydub)
-- Microfone conectado
+- **ffmpeg** no PATH — necessário apenas para conversão de formatos não-WAV (mp3, ogg…) no upload de vozes; **não é necessário para captura de áudio**
 - Arquivo de áudio de referência para síntese de voz (`.wav`) — gerenciável pelo painel admin
+- **HTTPS obrigatório em produção** para o browser liberar acesso ao microfone (`getUserMedia`)
 
 ### 1. Instalar dependências
 
@@ -103,7 +105,7 @@ Isso cria o banco, tabelas e usuários/provedores/configurações padrão.
 python app.py
 ```
 
-Acesse `http://localhost:5000` no navegador.
+Acesse `http://localhost:9731` no navegador.
 
 ---
 
@@ -113,9 +115,16 @@ Acesse `http://localhost:5000` no navegador.
 docker-compose up --build
 ```
 
-O compose sobe o MySQL e a aplicação automaticamente. O banco é inicializado na primeira execução.
+O compose conecta ao **MySQL do host** via `host.docker.internal:3306` (sem subir um container de banco). O banco é inicializado automaticamente na primeira execução.
 
-> **Nota:** O acesso ao microfone em container requer que o host seja Linux com `/dev/snd` disponível. No Windows/macOS, rode a aplicação localmente.
+> **Pré-requisito Docker:** o usuário MySQL deve aceitar conexões de qualquer origem:
+> ```sql
+> CREATE USER IF NOT EXISTS 'acore'@'%' IDENTIFIED BY 'acore';
+> GRANT ALL PRIVILEGES ON voice_assistant.* TO 'acore'@'%';
+> FLUSH PRIVILEGES;
+> ```
+
+> **Nota:** O microfone é capturado no **browser do usuário** — não é mais necessário microfone ou dispositivo de áudio no servidor/container.
 
 ---
 
@@ -126,9 +135,11 @@ Faça login com o usuário `admin` e clique no ícone ⚙ no canto superior dire
 ### Aba Configurações
 Todas as configurações das APIs são editáveis:
 - **Whisper:** URL, usuário, senha, modelo
-- **Voice API:** URL, caminho do áudio de referência, `num_step`, velocidade
+- **Voice API:** URL, `num_step`, velocidade
 - **VAD:** threshold de detecção, chunks de silêncio para encerrar
 - **LLM:** tokens máximos, temperatura, system prompt
+
+> O campo "Áudio de referência" foi removido da UI — a voz é selecionada pela aba **Vozes**.
 
 ### Aba Provedores
 Gerencie os provedores de LLM. Provedores pré-cadastrados:
@@ -138,10 +149,11 @@ Cada provedor tem: nome, URL base, API key, modelo, flag de visão e flag de ati
 
 ### Aba Vozes
 Gerencie os arquivos de voz de referência usados na síntese TTS:
-- Faça upload de qualquer formato de áudio (`.wav`, `.mp3`, `.mp4`, `.ogg`, `.flac`, `.m4a`…)
-- O arquivo é **convertido automaticamente para WAV** via pydub/ffmpeg e salvo em `voices/`
+- Faça upload de `.wav` → **cópia direta** sem conversão (ffmpeg não necessário)
+- Outros formatos (`.mp3`, `.mp4`, `.ogg`, `.flac`…) → convertidos para WAV via pydub/ffmpeg
+- Os arquivos são salvos em `voices/` no servidor
 - Defina qual voz é o **padrão do sistema**
-- A voz pode ser trocada na interface principal em tempo real (reinicia o pipeline automaticamente)
+- A voz pode ser trocada na interface principal em tempo real
 
 ### Aba Usuários
 Crie, edite e remova usuários. Defina o papel (admin ou normal).
@@ -220,8 +232,9 @@ cd OmniVoice-API
 
 - `flask`, `pymysql`, `python-dotenv`
 - `torch`, `torchaudio` — Silero VAD
-- `sounddevice`, `numpy` — captura de áudio
+- `numpy` — processamento de áudio (VAD server-side)
 - `requests` — chamadas HTTP
 - `Pillow` — screenshots (quando `VISION=yes`)
 - `werkzeug` — hash de senhas
-- `pydub` + **ffmpeg** — conversão de formatos de áudio para WAV
+- `pydub` + **ffmpeg** *(opcional)* — conversão de formatos não-WAV no upload de vozes
+- **Web Audio API** (browser nativo) — captura de microfone, VAD e encoding WAV no cliente
