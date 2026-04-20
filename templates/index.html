@@ -671,10 +671,10 @@ const bars      = document.getElementById('bars');
 // ── Browser VAD (microfone do usuário) ─────────────────────────────────
 // Captura PCM bruto e envia WAV nativo — sem ffmpeg no servidor
 const _VAD_SAMPLE_RATE = 16000;
-let _stream = null, _audioCtx = null, _analyser = null, _scriptProc = null;
-let _pcmChunks = [], _vadTimer = null;
+let _stream = null, _audioCtx = null, _scriptProc = null;
+let _pcmChunks = [];
 let _isSpeaking = false, _speechCnt = 0, _silCnt = 0;
-const VAD_MS = 100, SPEECH_ON = 4, SILENCE_OFF = 28;
+const SPEECH_ON = 3, SILENCE_OFF = 22;  // in onaudioprocess ticks (~128ms each @ 2048/16kHz)
 
 function _buildWAV(chunks, sr) {
   let len = chunks.reduce((s, c) => s + c.length, 0);
@@ -701,22 +701,13 @@ async function startBrowserVAD() {
     _stream   = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
     _audioCtx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: _VAD_SAMPLE_RATE});
     const src = _audioCtx.createMediaStreamSource(_stream);
-    _analyser = _audioCtx.createAnalyser();
-    _analyser.fftSize = 1024;
-    src.connect(_analyser);
 
-    _scriptProc = _audioCtx.createScriptProcessor(4096, 1, 1);
+    _scriptProc = _audioCtx.createScriptProcessor(2048, 1, 1);
     _scriptProc.onaudioprocess = e => {
-      if (_isSpeaking) _pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-    };
-    src.connect(_scriptProc);
-    _scriptProc.connect(_audioCtx.destination);
-
-    const buf = new Float32Array(_analyser.fftSize);
-    _vadTimer = setInterval(() => {
       if (!running) return;
-      _analyser.getFloatTimeDomainData(buf);
-      const rms = Math.sqrt(buf.reduce((s,v) => s + v*v, 0) / buf.length);
+      const data = new Float32Array(e.inputBuffer.getChannelData(0));
+      const rms  = Math.sqrt(data.reduce((s,v) => s + v*v, 0) / data.length);
+
       if (rms > 0.008) {
         _speechCnt++; _silCnt = 0;
         if (!_isSpeaking && _speechCnt >= SPEECH_ON) {
@@ -733,7 +724,10 @@ async function startBrowserVAD() {
           _sendAudio(chunks);
         }
       }
-    }, VAD_MS);
+      if (_isSpeaking) _pcmChunks.push(data);
+    };
+    src.connect(_scriptProc);
+    _scriptProc.connect(_audioCtx.destination);
     setStatus('listening');
   } catch(err) {
     showToast({api:'Microfone', status:null,
@@ -804,7 +798,6 @@ function captureScreenFrame() {
 }
 
 function _stopBrowserVAD() {
-  if (_vadTimer)    { clearInterval(_vadTimer); _vadTimer = null; }
   if (_scriptProc)  { _scriptProc.disconnect(); _scriptProc = null; }
   if (_stream)      { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
   if (_audioCtx)    { _audioCtx.close(); _audioCtx = null; }
