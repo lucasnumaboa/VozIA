@@ -529,4 +529,4 @@ if __name__ == "__main__":
     from init_db import init_db
     init_db()
     port = int(os.getenv("PORT", 5000))
-    app.run(debug=False, port=port, threaded=True)
+    app.run(host="0.0.0.0", debug=False, port=port, threaded=True)
