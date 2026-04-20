@@ -673,6 +673,8 @@ const bars      = document.getElementById('bars');
 const _VAD_SAMPLE_RATE = 16000;
 let _stream = null, _audioCtx = null, _scriptProc = null;
 let _pcmChunks = [];
+let _preBuffer = [];           // ring buffer de frames antes da fala
+const PRE_BUF_SIZE = 5;        // ~640ms de áudio antes da confirmação de fala
 let _isSpeaking = false, _speechCnt = 0, _silCnt = 0;
 const SPEECH_ON = 3, SILENCE_OFF = 22;  // in onaudioprocess ticks (~128ms each @ 2048/16kHz)
 
@@ -708,10 +710,16 @@ async function startBrowserVAD() {
       const data = new Float32Array(e.inputBuffer.getChannelData(0));
       const rms  = Math.sqrt(data.reduce((s,v) => s + v*v, 0) / data.length);
 
+      if (!_isSpeaking) {
+        _preBuffer.push(data);
+        if (_preBuffer.length > PRE_BUF_SIZE) _preBuffer.shift();
+      }
+
       if (rms > 0.008) {
         _speechCnt++; _silCnt = 0;
         if (!_isSpeaking && _speechCnt >= SPEECH_ON) {
-          _isSpeaking = true; _pcmChunks = [];
+          _isSpeaking = true;
+          _pcmChunks = _preBuffer.splice(0);  // inclui áudio pré-fala
           resetAudioPlayer(); setStatus('recording');
           _pendingScreenshot = captureScreenFrame();
         }
@@ -801,7 +809,7 @@ function _stopBrowserVAD() {
   if (_scriptProc)  { _scriptProc.disconnect(); _scriptProc = null; }
   if (_stream)      { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
   if (_audioCtx)    { _audioCtx.close(); _audioCtx = null; }
-  _isSpeaking = false; _speechCnt = 0; _silCnt = 0; _pcmChunks = [];
+  _isSpeaking = false; _speechCnt = 0; _silCnt = 0; _pcmChunks = []; _preBuffer = [];
 }
 
 async function restartVAD() {
