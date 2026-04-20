@@ -1,4 +1,4 @@
-import base64, difflib, io, json, math, os, queue, re, tempfile, threading, time, wave
+import base64, difflib, io, json, math, os, platform, queue, re, tempfile, threading, time, wave
 from functools import wraps
 
 import numpy as np, pymysql, pymysql.cursors, requests, torch, sounddevice as sd
@@ -97,6 +97,8 @@ print("VAD pronto.", flush=True)
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def take_screenshot() -> str:
     """Returns base64 PNG or raises RuntimeError if no display available."""
+    if platform.system() != "Windows" and not os.environ.get("DISPLAY"):
+        raise RuntimeError("Screenshot indisponível: sem DISPLAY (ambiente headless)")
     try:
         img = ImageGrab.grab()
     except Exception as e:
@@ -193,7 +195,8 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
             return
 
         # 2 ── LLM ─────────────────────────────────────────────────────────────
-        vision_on = (os.getenv("VISION", "no").lower() == "yes") and bool(provider.get("vision"))
+        _has_display = (platform.system() == "Windows") or bool(os.environ.get("DISPLAY"))
+        vision_on = (os.getenv("VISION", "no").lower() == "yes") and bool(provider.get("vision")) and _has_display
         sys_prompt = cfg.get("system_prompt", "")
         max_tok    = int(cfg.get("max_output_tokens", 400))
         temp       = float(cfg.get("temperature", 0.7))
