@@ -867,6 +867,21 @@ function _setFavicon(href) {
   if (link) link.href = href;
 }
 
+function _playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine'; osc.frequency.value = 480;
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.25);
+    osc.onended = () => ctx.close();
+  } catch(e) {}
+}
+
 function showWakeHint(agentName) {
   const el  = document.getElementById('wakeHint');
   const msg = document.getElementById('wakeHintMsg');
@@ -876,6 +891,7 @@ function showWakeHint(agentName) {
   void el.offsetWidth;
   el.style.animation = 'fadeInDown .25s ease';
   _setFavicon(_FAVICON_MISS);
+  _playBeep();
   if (_wakeTimer) clearTimeout(_wakeTimer);
   _wakeTimer = setTimeout(() => {
     el.style.display = 'none';
