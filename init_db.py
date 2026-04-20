@@ -140,9 +140,8 @@ def init_db():
             if cur.fetchone()["c"] == 0:
                 project_dir = os.path.dirname(os.path.abspath(__file__))
                 candidates = (
-                    glob.glob(os.path.join(project_dir, "*.wav")) +
                     glob.glob(os.path.join(project_dir, "voices", "*.wav")) +
-                    [r"C:\Users\PC2\Desktop\Matheus TI.wav"]
+                    glob.glob(os.path.join(project_dir, "*.wav"))
                 )
                 default_path = next((p for p in candidates if os.path.exists(p)), "")
                 default_name = os.path.splitext(os.path.basename(default_path))[0] if default_path else "Padrão"
