@@ -123,8 +123,9 @@ def _log(step, status, elapsed, extra=""):
 def split_tts_chunks(text: str, words_per_chunk: int = 80) -> list:
     """Split text into chunks of words_per_chunk words — never mid-word."""
     words = text.split()
-    return [" ".join(words[i:i + words_per_chunk])
-            for i in range(0, len(words), words_per_chunk)] or [text.strip()]
+    chunks = [" ".join(words[i:i + words_per_chunk])
+              for i in range(0, len(words), words_per_chunk)]
+    return [c for c in chunks if c.strip()] or []
 
 def _wav_duration(b64_str: str) -> float:
     """Return actual playback duration (seconds) of a base64-encoded WAV."""
@@ -253,10 +254,19 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
         rj  = r.json(); raw = rj.get("output", "")
         if isinstance(raw, list):
             ai_text = next((x["content"] for x in raw if x.get("type") == "message"), "").strip()
+            if not ai_text:
+                ai_text = next((x["content"] for x in raw if x.get("type") == "reasoning"), "").strip()
+                if ai_text:
+                    print("  [llm] Apenas reasoning retornado, usando como resposta", flush=True)
         else:
             ai_text = (raw or rj.get("choices",[{}])[0].get("message",{}).get("content","")).strip()
 
         print(f'  [>] IA: "{ai_text[:100]}{"..." if len(ai_text)>100 else ""}"', flush=True)
+        if not ai_text:
+            print("  [!] Resposta da IA vazia", flush=True)
+            broadcast("ai_text", "(sem resposta)")
+            if not _cancel_event.is_set(): broadcast("status", "listening")
+            return
         broadcast("ai_text", ai_text)
         if cancelled(): return
 
@@ -266,10 +276,13 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
         if ref and os.path.exists(ref) and voice_url:
             tts_parts = split_tts_chunks(ai_text, words_per_chunk=20)
             total     = len(tts_parts)
-            language  = cfg.get("language", "Portuguese")
-            num_step  = int(cfg.get("num_step", 10))
-            speed     = float(cfg.get("speed", 1.0))
-            print(f"  [tts] {total} chunk(s)", flush=True)
+            if total > 0:
+                language  = cfg.get("language", "Portuguese")
+                num_step  = int(cfg.get("num_step", 10))
+                speed     = float(cfg.get("speed", 1.0))
+                print(f"  [tts] {total} chunk(s)", flush=True)
+            else:
+                print("  [tts] Sem texto para sintetizar — pulando", flush=True)
 
             if total == 1:
                 # ── Single chunk: original endpoint ─────────────────────────
@@ -295,7 +308,7 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
                             "index": 0, "total": 1, "audio": chunk_b64,
                             "last": True, "start_after": 1,
                         })
-            else:
+            elif total > 1:
                 # ── Multiple chunks: batch endpoint ──────────────────────────
                 batch_url = voice_url.rstrip("/") + "/batch"
                 items     = [{"text": p, "language": language, "speed": speed}
