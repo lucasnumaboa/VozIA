@@ -151,7 +151,7 @@ def _contains_wake_word(text: str, wake_word: str, threshold: float = 0.75) -> b
     return False
 
 # ── Pipeline ───────────────────────────────────────────────────────────────────
-def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, voice_path: str = "", agent_name: str = ""):
+def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, voice_path: str = "", agent_name: str = "", screenshot_b64: str = ""):
     """Core pipeline shared by server VAD and browser audio upload."""
     broadcast("status", "processing")
     t_total = time.time()
@@ -195,29 +195,38 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
             return
 
         # 2 ── LLM ─────────────────────────────────────────────────────────────
-        _has_display = (platform.system() == "Windows") or bool(os.environ.get("DISPLAY"))
+        _has_display = screenshot_b64 or (platform.system() == "Windows") or bool(os.environ.get("DISPLAY"))
         vision_on = (os.getenv("VISION", "no").lower() == "yes") and bool(provider.get("vision")) and _has_display
         sys_prompt = cfg.get("system_prompt", "")
         max_tok    = int(cfg.get("max_output_tokens", 400))
         temp       = float(cfg.get("temperature", 0.7))
 
         if vision_on:
-            print("  [vis] Capturando screenshot...", flush=True)
-            try:
-                img_b64 = take_screenshot()
+            if screenshot_b64:
+                print("  [vis] Usando screenshot do browser", flush=True)
+                img_b64  = screenshot_b64
+                img_mime = "image/jpeg"
+                vision_ok = True
+            else:
+                print("  [vis] Capturando screenshot local...", flush=True)
+                try:
+                    img_b64  = take_screenshot()
+                    img_mime = "image/png"
+                    vision_ok = True
+                except RuntimeError as e:
+                    print(f"  [vis] {e} — continuando sem imagem", flush=True)
+                    vision_ok = False
+            if vision_ok:
                 lm_url  = f"{provider['base_url']}/api/v1/chat"
                 lm_body = {
                     "model": provider["model"], "system_prompt": sys_prompt,
                     "input": [
                         {"type": "text",  "content": f"{transcript}\n\n[Screenshot da tela anexado]"},
-                        {"type": "image", "data_url": f"data:image/png;base64,{img_b64}"},
+                        {"type": "image", "data_url": f"data:{img_mime};base64,{img_b64}"},
                     ],
                     "max_output_tokens": max_tok, "temperature": temp,
                 }
-            except RuntimeError as e:
-                print(f"  [vis] {e} — continuando sem imagem", flush=True)
-                broadcast("error", {"api": "Visão", "status": None,
-                                    "detail": str(e) + " — respondendo sem screenshot."})
+            else:
                 vision_on = False  # cai no bloco text-only abaixo
         if not vision_on:
             lm_url  = f"{provider['base_url']}/v1/chat/completions"
@@ -574,8 +583,9 @@ def api_audio():
         agent_name = arow["agent_name"] if arow else ""
     except Exception:
         agent_name = ""
+    screenshot_b64 = request.form.get("screenshot", "")
     threading.Thread(target=_run_pipeline,
-                     args=(wav_io, gen, provider, cfg, voice_path, agent_name),
+                     args=(wav_io, gen, provider, cfg, voice_path, agent_name, screenshot_b64),
                      daemon=True).start()
     return jsonify({"ok": True, "gen": gen})
 

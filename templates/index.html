@@ -381,6 +381,7 @@
   </div>
   <div class="topbar-right">
     <span class="agent-tag" id="agentTag" title="Clique para renomear o agente" onclick="openAgentModal(false)">🤖 ...</span>
+    <button class="btn-icon" id="screenBtn" title="Compartilhar tela (visão da IA)" onclick="toggleScreenShare()">🖥️</button>
     <span class="user-badge">{{ username }}</span>
     {% if role == 'admin' %}
     <button class="btn-icon" id="adminBtn" title="Configurações">⚙</button>
@@ -742,6 +743,8 @@ async function _sendAudio(chunks) {
   fd.append('audio', blob, 'rec.wav');
   if (selectedProviderId) fd.append('provider_id', selectedProviderId);
   if (selectedVoiceId)    fd.append('voice_id', selectedVoiceId);
+  const frame = captureScreenFrame();
+  if (frame) fd.append('screenshot', frame);
   try {
     const res  = await fetch('/api/audio', {method:'POST', body:fd});
     const data = await res.json();
@@ -750,6 +753,45 @@ async function _sendAudio(chunks) {
     showToast({api:'Upload', status:null, detail:err.message});
     setStatus('listening');
   }
+}
+
+// ── Screen share ────────────────────────────────────────────────────────────
+let _screenStream = null;
+let _screenVideo  = null;
+
+async function toggleScreenShare() {
+  if (_screenStream) { stopScreenShare(); return; }
+  try {
+    _screenStream = await navigator.mediaDevices.getDisplayMedia(
+      {video: {cursor: 'always'}, audio: false});
+    _screenVideo = document.createElement('video');
+    _screenVideo.srcObject = _screenStream;
+    _screenVideo.muted = true;
+    await _screenVideo.play();
+    _screenStream.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
+    const btn = document.getElementById('screenBtn');
+    btn.textContent = '🖥️✓'; btn.style.borderColor = '#4f8ef7'; btn.style.color = '#4f8ef7';
+  } catch(e) {
+    showToast({api:'Tela', status:null, detail:'Compartilhamento cancelado: ' + e.message});
+  }
+}
+
+function stopScreenShare() {
+  if (_screenStream) { _screenStream.getTracks().forEach(t => t.stop()); _screenStream = null; }
+  _screenVideo = null;
+  const btn = document.getElementById('screenBtn');
+  btn.textContent = '🖥️'; btn.style.borderColor = ''; btn.style.color = '';
+}
+
+function captureScreenFrame() {
+  if (!_screenStream || !_screenVideo || !_screenVideo.videoWidth) return null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width  = _screenVideo.videoWidth;
+    canvas.height = _screenVideo.videoHeight;
+    canvas.getContext('2d').drawImage(_screenVideo, 0, 0);
+    return canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+  } catch(e) { return null; }
 }
 
 function _stopBrowserVAD() {
