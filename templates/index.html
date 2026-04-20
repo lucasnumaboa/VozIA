@@ -389,6 +389,27 @@
   </div>
 </div>
 
+<!-- Wake-word hint banner -->
+<div id="wakeHint" style="
+  display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%);
+  background:#1a1a2e; border:1px solid #4f8ef7; border-radius:12px;
+  padding:12px 20px; font-size:0.88rem; color:#a0c4ff;
+  box-shadow:0 4px 20px rgba(79,142,247,.25); z-index:500;
+  text-align:center; white-space:nowrap;
+  animation:fadeInDown .25s ease;
+">
+  🤖 <span id="wakeHintMsg"></span>
+</div>
+<style>
+  @keyframes fadeInDown {
+    from { opacity:0; transform:translateX(-50%) translateY(-10px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+  }
+  @media(max-width:600px) {
+    #wakeHint { top:auto; bottom:80px; white-space:normal; width:88%; }
+  }
+</style>
+
 <!-- Error Toast -->
 <div class="error-toast" id="errorToast">
   <span class="et-icon">⚠️</span>
@@ -777,7 +798,22 @@ function startSSE() {
     if (type === 'error')      { showToast(data); }
     if (type === 'audio_chunk') { handleAudioChunk(data); }
     if (type === 'status' && (data === 'recording' || data === 'processing')) { resetAudioPlayer(); }
+    if (type === 'wake_miss')   { showWakeHint(data); }
   };
+}
+
+// ── Wake hint ────────────────────────────────────────────────────────
+let _wakeTimer = null;
+function showWakeHint(agentName) {
+  const el  = document.getElementById('wakeHint');
+  const msg = document.getElementById('wakeHintMsg');
+  msg.textContent = `Fale o nome "${agentName}" para que eu possa responder.`;
+  el.style.display = 'block';
+  el.style.animation = 'none';
+  void el.offsetWidth; // reflow para reiniciar animação
+  el.style.animation = 'fadeInDown .25s ease';
+  if (_wakeTimer) clearTimeout(_wakeTimer);
+  _wakeTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 
 // ── Error Toast ──────────────────────────────────────────────────────

@@ -183,6 +183,7 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
         # Wake word check
         if agent_name and not _contains_wake_word(transcript, agent_name):
             print(f"  [wake] '{agent_name}' não detectado — ignorando", flush=True)
+            broadcast("wake_miss", agent_name)
             if not _cancel_event.is_set(): broadcast("status", "listening")
             return
 
