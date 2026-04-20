@@ -440,31 +440,98 @@ const playBtn   = document.getElementById('playBtn');
 const statusTxt = document.getElementById('statusTxt');
 const bars      = document.getElementById('bars');
 
+// ── Browser VAD (microfone do usuário) ─────────────────────────────────
+let _stream = null, _audioCtx = null, _analyser = null;
+let _recorder = null, _recChunks = [], _vadTimer = null;
+let _isSpeaking = false, _speechCnt = 0, _silCnt = 0;
+const VAD_MS = 100, SPEECH_ON = 4, SILENCE_OFF = 28;
+
+async function startBrowserVAD() {
+  try {
+    _stream   = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = _audioCtx.createMediaStreamSource(_stream);
+    _analyser = _audioCtx.createAnalyser();
+    _analyser.fftSize = 1024;
+    src.connect(_analyser);
+
+    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg'].find(
+      m => MediaRecorder.isTypeSupported(m)) || '';
+    _recorder = new MediaRecorder(_stream, mimeType ? {mimeType} : {});
+    _recorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+    _recorder.onstop = _sendAudio;
+
+    const buf = new Float32Array(_analyser.fftSize);
+    _vadTimer = setInterval(() => {
+      if (!running) return;
+      _analyser.getFloatTimeDomainData(buf);
+      const rms = Math.sqrt(buf.reduce((s,v) => s + v*v, 0) / buf.length);
+      if (rms > 0.008) {
+        _speechCnt++; _silCnt = 0;
+        if (!_isSpeaking && _speechCnt >= SPEECH_ON) {
+          _isSpeaking = true; _recChunks = [];
+          if (_recorder.state === 'inactive') _recorder.start();
+          resetAudioPlayer(); setStatus('recording');
+        }
+      } else {
+        _silCnt++; _speechCnt = 0;
+        if (_isSpeaking && _silCnt >= SILENCE_OFF) {
+          _isSpeaking = false; _silCnt = 0;
+          if (_recorder.state === 'recording') { _recorder.stop(); setStatus('processing'); }
+        }
+      }
+    }, VAD_MS);
+    setStatus('listening');
+  } catch(err) {
+    showToast({api:'Microfone', status:null,
+      detail:'Permissão negada ou microfone não encontrado: ' + err.message});
+    _stopBrowserVAD();
+    running = false;
+    playBtn.textContent = '▶'; playBtn.classList.remove('active');
+  }
+}
+
+async function _sendAudio() {
+  if (!_recChunks.length) { setStatus('listening'); return; }
+  const blob = new Blob(_recChunks, {type: _recorder.mimeType || 'audio/webm'});
+  _recChunks = [];
+  const fd = new FormData();
+  fd.append('audio', blob, 'rec.webm');
+  if (selectedProviderId) fd.append('provider_id', selectedProviderId);
+  if (selectedVoiceId)    fd.append('voice_id', selectedVoiceId);
+  try {
+    const res = await fetch('/api/audio', {method:'POST', body:fd});
+    const data = await res.json();
+    if (data.error) showToast({api:'Audio', status:null, detail:data.error});
+  } catch(err) {
+    showToast({api:'Upload', status:null, detail:err.message});
+    setStatus('listening');
+  }
+}
+
+function _stopBrowserVAD() {
+  if (_vadTimer)  { clearInterval(_vadTimer); _vadTimer = null; }
+  if (_recorder && _recorder.state !== 'inactive') _recorder.stop();
+  if (_stream)    { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
+  if (_audioCtx)  { _audioCtx.close(); _audioCtx = null; }
+  _isSpeaking = false; _speechCnt = 0; _silCnt = 0;
+}
+
 async function restartVAD() {
-  await fetch('/stop', {method:'POST'});
-  await new Promise(r => setTimeout(r, 500));
-  await fetch('/start', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({provider_id: selectedProviderId || 1, voice_id: selectedVoiceId}),
-  });
+  _stopBrowserVAD();
+  await startBrowserVAD();
 }
 
 playBtn.addEventListener('click', async () => {
   if (!running) {
-    await fetch('/start', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({provider_id: selectedProviderId || 1, voice_id: selectedVoiceId}),
-    });
     running = true;
-    playBtn.textContent = '⏹';
-    playBtn.classList.add('active');
+    playBtn.textContent = '⏹'; playBtn.classList.add('active');
     startSSE();
+    await startBrowserVAD();
   } else {
-    await fetch('/stop', {method:'POST'});
+    _stopBrowserVAD();
     running = false;
-    playBtn.textContent = '▶';
-    playBtn.classList.remove('active');
+    playBtn.textContent = '▶'; playBtn.classList.remove('active');
     bars.classList.remove('active');
     setStatus('parado');
   }
@@ -596,11 +663,12 @@ async function loadSettings() {
   const grid = document.getElementById('settingsGrid');
   grid.innerHTML = '';
   for (const [k, v] of Object.entries(data)) {
-    const label = SETTING_LABELS[k] || k;
+    if (!(k in SETTING_LABELS)) continue;
+    const label = SETTING_LABELS[k];
     const full  = k === 'system_prompt';
     const el    = full
       ? `<textarea id="s_${k}">${v}</textarea>`
-      : `<input id="s_${k}" value="${v.replace(/"/g,'&quot;')}" />`;
+      : `<input id="s_${k}" value="${String(v).replace(/"/g,'&quot;')}" />`;
     grid.innerHTML += `<div class="field${full?' full':''}"><label>${label}</label>${el}</div>`;
   }
 }

@@ -129,7 +129,8 @@ def _wav_duration(b64_str: str) -> float:
         return 2.0
 
 # ── Pipeline ───────────────────────────────────────────────────────────────────
-def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_path: str = ""):
+def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, voice_path: str = ""):
+    """Core pipeline shared by server VAD and browser audio upload."""
     broadcast("status", "processing")
     t_total = time.time()
     print(f"\n{'─'*52}\n  [>>] Pipeline gen={my_gen} | {provider.get('name','?')}", flush=True)
@@ -141,7 +142,7 @@ def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_pa
 
     try:
         if cancelled(): return
-        wav = chunks_to_wav(chunks)
+        wav = wav_io
 
         # 1 ── Whisper ──────────────────────────────────────────────────────────
         t0 = time.time()
@@ -262,6 +263,11 @@ def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_pa
         print(f"  [!] {e}", flush=True); broadcast("error", str(e))
     finally:
         if not _cancel_event.is_set(): broadcast("status", "listening")
+
+
+def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_path: str = ""):
+    """Server-side mic path: convert numpy chunks to WAV then run pipeline."""
+    _run_pipeline(chunks_to_wav(chunks), my_gen, provider, cfg, voice_path)
 
 # ── VAD loop ───────────────────────────────────────────────────────────────────
 def _vad_loop(provider_id: int, voice_id: int = None):
@@ -446,6 +452,41 @@ def admin_user(uid):
         exe("UPDATE users SET username=%s,role=%s WHERE id=%s",
             (d["username"], d["role"], uid))
     return jsonify({"ok": True})
+
+# ── Browser audio upload ───────────────────────────────────────────────────────
+@app.route("/api/audio", methods=["POST"])
+@login_required
+def api_audio():
+    f = request.files.get("audio")
+    if not f:
+        return jsonify({"error": "no audio"}), 400
+    provider_id = request.form.get("provider_id", type=int)
+    voice_id    = request.form.get("voice_id",    type=int)
+    try:
+        seg = AudioSegment.from_file(f)
+        seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+        wav_io = io.BytesIO()
+        seg.export(wav_io, format="wav")
+        wav_io.seek(0)
+    except Exception as e:
+        return jsonify({"error": f"audio convert: {e}"}), 400
+    provider = get_provider(provider_id) or {}
+    cfg      = get_settings()
+    try:
+        vrow = q1("SELECT file_path FROM voices WHERE id=%s AND is_active=1", (voice_id,)) if voice_id else None
+        if not vrow:
+            vrow = q1("SELECT file_path FROM voices WHERE is_default=1 AND is_active=1 LIMIT 1")
+        voice_path = vrow["file_path"] if vrow else cfg.get("voice_ref_audio", "")
+    except Exception:
+        voice_path = cfg.get("voice_ref_audio", "")
+    global _pipeline_gen
+    _pipeline_gen += 1
+    gen = _pipeline_gen
+    _cancel_event.clear()
+    threading.Thread(target=_run_pipeline,
+                     args=(wav_io, gen, provider, cfg, voice_path),
+                     daemon=True).start()
+    return jsonify({"ok": True, "gen": gen})
 
 # ── VAD control ────────────────────────────────────────────────────────────────
 @app.route("/start", methods=["POST"])
