@@ -542,25 +542,48 @@ const statusTxt = document.getElementById('statusTxt');
 const bars      = document.getElementById('bars');
 
 // ── Browser VAD (microfone do usuário) ─────────────────────────────────
-let _stream = null, _audioCtx = null, _analyser = null;
-let _recorder = null, _recChunks = [], _vadTimer = null;
+// Captura PCM bruto e envia WAV nativo — sem ffmpeg no servidor
+const _VAD_SAMPLE_RATE = 16000;
+let _stream = null, _audioCtx = null, _analyser = null, _scriptProc = null;
+let _pcmChunks = [], _vadTimer = null;
 let _isSpeaking = false, _speechCnt = 0, _silCnt = 0;
 const VAD_MS = 100, SPEECH_ON = 4, SILENCE_OFF = 28;
+
+function _buildWAV(chunks, sr) {
+  let len = chunks.reduce((s, c) => s + c.length, 0);
+  const samples = new Float32Array(len);
+  let off = 0;
+  for (const c of chunks) { samples.set(c, off); off += c.length; }
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const v   = new DataView(buf);
+  const ws  = (o, s) => { for (let i=0; i<s.length; i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); v.setUint32(4, 36+samples.length*2, true); ws(8,'WAVE');
+  ws(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  ws(36,'data'); v.setUint32(40,samples.length*2,true);
+  off = 44;
+  for (let i=0; i<samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(off, s < 0 ? s*0x8000 : s*0x7FFF, true); off += 2;
+  }
+  return new Blob([buf], {type:'audio/wav'});
+}
 
 async function startBrowserVAD() {
   try {
     _stream   = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
-    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: _VAD_SAMPLE_RATE});
     const src = _audioCtx.createMediaStreamSource(_stream);
     _analyser = _audioCtx.createAnalyser();
     _analyser.fftSize = 1024;
     src.connect(_analyser);
 
-    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg'].find(
-      m => MediaRecorder.isTypeSupported(m)) || '';
-    _recorder = new MediaRecorder(_stream, mimeType ? {mimeType} : {});
-    _recorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
-    _recorder.onstop = _sendAudio;
+    _scriptProc = _audioCtx.createScriptProcessor(4096, 1, 1);
+    _scriptProc.onaudioprocess = e => {
+      if (_isSpeaking) _pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    };
+    src.connect(_scriptProc);
+    _scriptProc.connect(_audioCtx.destination);
 
     const buf = new Float32Array(_analyser.fftSize);
     _vadTimer = setInterval(() => {
@@ -570,15 +593,16 @@ async function startBrowserVAD() {
       if (rms > 0.008) {
         _speechCnt++; _silCnt = 0;
         if (!_isSpeaking && _speechCnt >= SPEECH_ON) {
-          _isSpeaking = true; _recChunks = [];
-          if (_recorder.state === 'inactive') _recorder.start();
+          _isSpeaking = true; _pcmChunks = [];
           resetAudioPlayer(); setStatus('recording');
         }
       } else {
         _silCnt++; _speechCnt = 0;
         if (_isSpeaking && _silCnt >= SILENCE_OFF) {
           _isSpeaking = false; _silCnt = 0;
-          if (_recorder.state === 'recording') { _recorder.stop(); setStatus('processing'); }
+          const chunks = _pcmChunks.splice(0); _pcmChunks = [];
+          setStatus('processing');
+          _sendAudio(chunks);
         }
       }
     }, VAD_MS);
@@ -592,16 +616,15 @@ async function startBrowserVAD() {
   }
 }
 
-async function _sendAudio() {
-  if (!_recChunks.length) { setStatus('listening'); return; }
-  const blob = new Blob(_recChunks, {type: _recorder.mimeType || 'audio/webm'});
-  _recChunks = [];
-  const fd = new FormData();
-  fd.append('audio', blob, 'rec.webm');
+async function _sendAudio(chunks) {
+  if (!chunks || !chunks.length) { setStatus('listening'); return; }
+  const blob = _buildWAV(chunks, _VAD_SAMPLE_RATE);
+  const fd   = new FormData();
+  fd.append('audio', blob, 'rec.wav');
   if (selectedProviderId) fd.append('provider_id', selectedProviderId);
   if (selectedVoiceId)    fd.append('voice_id', selectedVoiceId);
   try {
-    const res = await fetch('/api/audio', {method:'POST', body:fd});
+    const res  = await fetch('/api/audio', {method:'POST', body:fd});
     const data = await res.json();
     if (data.error) showToast({api:'Audio', status:null, detail:data.error});
   } catch(err) {
@@ -611,11 +634,11 @@ async function _sendAudio() {
 }
 
 function _stopBrowserVAD() {
-  if (_vadTimer)  { clearInterval(_vadTimer); _vadTimer = null; }
-  if (_recorder && _recorder.state !== 'inactive') _recorder.stop();
-  if (_stream)    { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
-  if (_audioCtx)  { _audioCtx.close(); _audioCtx = null; }
-  _isSpeaking = false; _speechCnt = 0; _silCnt = 0;
+  if (_vadTimer)    { clearInterval(_vadTimer); _vadTimer = null; }
+  if (_scriptProc)  { _scriptProc.disconnect(); _scriptProc = null; }
+  if (_stream)      { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
+  if (_audioCtx)    { _audioCtx.close(); _audioCtx = null; }
+  _isSpeaking = false; _speechCnt = 0; _silCnt = 0; _pcmChunks = [];
 }
 
 async function restartVAD() {

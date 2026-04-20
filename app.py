@@ -498,14 +498,20 @@ def api_audio():
         return jsonify({"error": "no audio"}), 400
     provider_id = request.form.get("provider_id", type=int)
     voice_id    = request.form.get("voice_id",    type=int)
+    raw = f.read()
     try:
-        seg = AudioSegment.from_file(f)
-        seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-        wav_io = io.BytesIO()
-        seg.export(wav_io, format="wav")
+        wav_io = io.BytesIO(raw)
+        with wave.open(wav_io): pass
         wav_io.seek(0)
-    except Exception as e:
-        return jsonify({"error": f"audio convert: {e}"}), 400
+    except Exception:
+        try:
+            seg = AudioSegment.from_file(io.BytesIO(raw))
+            seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+            wav_io = io.BytesIO()
+            seg.export(wav_io, format="wav")
+            wav_io.seek(0)
+        except Exception as e:
+            return jsonify({"error": f"audio convert: {e}"}), 400
     provider = get_provider(provider_id) or {}
     cfg      = get_settings()
     try:
@@ -568,16 +574,19 @@ def admin_voices_route():
     name   = request.form.get("name", "").strip() or os.path.splitext(f.filename)[0]
     is_def = int(request.form.get("is_default", 0))
     os.makedirs(VOICES_DIR, exist_ok=True)
-    suffix = os.path.splitext(secure_filename(f.filename))[-1] or ".bin"
+    suffix = os.path.splitext(secure_filename(f.filename))[-1].lower() or ".bin"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     f.save(tmp.name); tmp.close()
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    out  = os.path.join(VOICES_DIR, f"{safe}.wav")
     try:
-        audio = AudioSegment.from_file(tmp.name)
-        safe  = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
-        out   = os.path.join(VOICES_DIR, f"{safe}.wav")
-        audio.export(out, format="wav")
+        if suffix == ".wav":
+            import shutil; shutil.copy2(tmp.name, out)
+        else:
+            AudioSegment.from_file(tmp.name).export(out, format="wav")
     finally:
-        os.unlink(tmp.name)
+        try: os.unlink(tmp.name)
+        except: pass
     if is_def: exe("UPDATE voices SET is_default=0")
     vid = exe("INSERT INTO voices (name,file_path,is_default) VALUES (%s,%s,%s)", (name, out, is_def))
     return jsonify({"id": vid})
