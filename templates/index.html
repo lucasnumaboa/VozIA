@@ -557,7 +557,8 @@
 let running = false;
 let selectedProviderId = null;
 let selectedVoiceId    = null;
-let _providerVision   = false;  // provedor selecionado suporta visão?
+let _providerVision    = false;  // provedor selecionado suporta visão?
+let _pendingScreenshot = null;   // snapshot capturado ao início da fala
 let editingProviderId  = null;
 let editingUserId      = null;
 
@@ -721,6 +722,7 @@ async function startBrowserVAD() {
         if (!_isSpeaking && _speechCnt >= SPEECH_ON) {
           _isSpeaking = true; _pcmChunks = [];
           resetAudioPlayer(); setStatus('recording');
+          _pendingScreenshot = captureScreenFrame();
         }
       } else {
         _silCnt++; _speechCnt = 0;
@@ -749,8 +751,7 @@ async function _sendAudio(chunks) {
   fd.append('audio', blob, 'rec.wav');
   if (selectedProviderId) fd.append('provider_id', selectedProviderId);
   if (selectedVoiceId)    fd.append('voice_id', selectedVoiceId);
-  const frame = captureScreenFrame();
-  if (frame) fd.append('screenshot', frame);
+  if (_pendingScreenshot) { fd.append('screenshot', _pendingScreenshot); _pendingScreenshot = null; }
   try {
     const res  = await fetch('/api/audio', {method:'POST', body:fd});
     const data = await res.json();
