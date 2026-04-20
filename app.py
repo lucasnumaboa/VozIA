@@ -120,12 +120,50 @@ def _log(step, status, elapsed, extra=""):
     mark = "✓" if status == 200 else "✗"
     print(f"  [{mark}] {step:<18} HTTP {status}  {elapsed:.2f}s  {extra}", flush=True)
 
-def split_tts_chunks(text: str, words_per_chunk: int = 80) -> list:
-    """Split text into chunks of words_per_chunk words — never mid-word."""
-    words = text.split()
-    chunks = [" ".join(words[i:i + words_per_chunk])
-              for i in range(0, len(words), words_per_chunk)]
-    return [c for c in chunks if c.strip()] or []
+def split_tts_chunks(text: str, words_per_chunk: int = 20) -> list:
+    """Split text at natural boundaries (sentences, clauses) respecting max words.
+
+    Priority: sentence-end (.!?) → clause-end (,;:—) → word-count fallback.
+    This avoids cutting mid-phrase which produces abrupt TTS transitions.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks = []
+    buf = []
+    buf_wc = 0
+    for sent in sentences:
+        sent_words = sent.split()
+        if buf_wc + len(sent_words) <= words_per_chunk:
+            buf.extend(sent_words)
+            buf_wc += len(sent_words)
+            continue
+        if buf:
+            chunks.append(" ".join(buf))
+            buf, buf_wc = [], 0
+        if len(sent_words) <= words_per_chunk:
+            buf = sent_words
+            buf_wc = len(sent_words)
+            continue
+        clauses = re.split(r'(?<=[,;:—])\s+', sent)
+        for clause in clauses:
+            c_words = clause.split()
+            if buf_wc + len(c_words) <= words_per_chunk:
+                buf.extend(c_words)
+                buf_wc += len(c_words)
+            else:
+                if buf:
+                    chunks.append(" ".join(buf))
+                    buf, buf_wc = [], 0
+                while len(c_words) > words_per_chunk:
+                    chunks.append(" ".join(c_words[:words_per_chunk]))
+                    c_words = c_words[words_per_chunk:]
+                buf = c_words
+                buf_wc = len(c_words)
+    if buf:
+        chunks.append(" ".join(buf))
+    return [c for c in chunks if c.strip()]
 
 def _wav_duration(b64_str: str) -> float:
     """Return actual playback duration (seconds) of a base64-encoded WAV."""

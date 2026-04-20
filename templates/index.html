@@ -890,13 +890,21 @@ function closeToast() {
   document.getElementById('errorToast').classList.remove('show');
 }
 
-// ── Audio chunk player ───────────────────────────────────────────────────────────
+// ── Audio chunk player (Web Audio API + crossfade) ──────────────────────────────
 const _audioQueue  = {};   // index → base64
 let   _audioTotal       = 0;
 let   _audioPlaying     = false;
 let   _audioStarted     = false;
 let   _audioAllReceived = false;
-let   _audioStartAfter  = 2;   // updated by first chunk's adaptive value
+let   _audioStartAfter  = 2;
+let   _playCtx          = null;   // AudioContext for playback
+const CROSSFADE_SEC     = 0.045;  // 45ms crossfade between chunks
+
+function _getPlayCtx() {
+  if (!_playCtx || _playCtx.state === 'closed') _playCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_playCtx.state === 'suspended') _playCtx.resume();
+  return _playCtx;
+}
 
 function resetAudioPlayer() {
   Object.keys(_audioQueue).forEach(k => delete _audioQueue[k]);
@@ -909,7 +917,6 @@ function handleAudioChunk({index, total, audio, last, start_after}) {
   _audioQueue[index] = audio;
   _audioTotal = total;
   if (last) _audioAllReceived = true;
-  // First chunk carries the adaptive buffer size calculated by the backend
   if (index === 0 && start_after != null) {
     _audioStartAfter = start_after;
     console.log(`[audio] adaptive start_after=${start_after}`);
@@ -921,18 +928,50 @@ function handleAudioChunk({index, total, audio, last, start_after}) {
   }
 }
 
+async function _decodeB64Wav(b64) {
+  const ctx  = _getPlayCtx();
+  const bin  = atob(b64);
+  const buf  = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return ctx.decodeAudioData(buf.buffer);
+}
+
 function _playChunk(idx) {
   if (idx >= _audioTotal) { _audioPlaying = false; return; }
   if (_audioQueue[idx] === undefined) {
-    // chunk not yet arrived — poll every 80ms
     setTimeout(() => _playChunk(idx), 80); return;
   }
   _audioPlaying = true;
-  const a = new Audio('data:audio/wav;base64,' + _audioQueue[idx]);
-  delete _audioQueue[idx];  // free memory
-  a.onended  = () => _playChunk(idx + 1);
-  a.onerror  = () => _playChunk(idx + 1);
-  a.play().catch(() => _playChunk(idx + 1));
+  const b64 = _audioQueue[idx];
+  delete _audioQueue[idx];
+
+  _decodeB64Wav(b64).then(audioBuf => {
+    const ctx    = _getPlayCtx();
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuf;
+    const gain = ctx.createGain();
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    const dur = audioBuf.duration;
+
+    // Fade-in
+    if (idx > 0) {
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(1, ctx.currentTime + CROSSFADE_SEC);
+    }
+    // Fade-out before end (if not last chunk)
+    if (idx < _audioTotal - 1) {
+      const fadeStart = Math.max(0, dur - CROSSFADE_SEC);
+      gain.gain.setValueAtTime(1, ctx.currentTime + fadeStart);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + dur);
+      // Start next chunk slightly before this one ends (overlap)
+      const overlapAt = Math.max(0, dur - CROSSFADE_SEC);
+      setTimeout(() => _playChunk(idx + 1), overlapAt * 1000);
+    } else {
+      source.onended = () => { _audioPlaying = false; };
+    }
+    source.start(0);
+  }).catch(() => _playChunk(idx + 1));
 }
 
 // ── Admin Modal ───────────────────────────────────────────────────────────
