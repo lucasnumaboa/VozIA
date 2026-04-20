@@ -703,6 +703,10 @@ def admin_voices_route():
             import shutil; shutil.copy2(tmp.name, out)
         else:
             AudioSegment.from_file(tmp.name).export(out, format="wav")
+    except Exception as e:
+        try: os.unlink(tmp.name)
+        except: pass
+        return jsonify({"error": f"Falha ao converter áudio ({suffix}): {e}"}), 400
     finally:
         try: os.unlink(tmp.name)
         except: pass

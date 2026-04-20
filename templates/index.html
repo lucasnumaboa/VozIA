@@ -1216,16 +1216,28 @@ document.getElementById('uf_save').addEventListener('click', async () => {
 
 async function delUser(id) {
   if (!confirm('Remover usuário?')) return;
-  const res = await fetch(`/admin/users/${id}`, {method:'DELETE'});
-  const data = await res.json();
-  if (data.error) { alert(data.error); return; }
+  const data = await safeFetchJSON(`/admin/users/${id}`, {method:'DELETE'});
+  if (!data || data.error) { if (data?.error) alert(data.error); return; }
   await loadUsersTable();
+}
+
+// ── Safe JSON fetch helper ────────────────────────────────────────────────────
+async function safeFetchJSON(url, opts) {
+  try {
+    const res = await fetch(url, opts);
+    const ct  = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      console.error(`[fetch] ${url} retornou ${res.status} (${ct})`);
+      return null;
+    }
+    return await res.json();
+  } catch(e) { console.error(`[fetch] ${url}:`, e); return null; }
 }
 
 // ── Voices admin tab ─────────────────────────────────────────────────────────
 async function loadVoicesTable() {
-  const res  = await fetch('/admin/voices');
-  const list = await res.json();
+  const list = await safeFetchJSON('/admin/voices');
+  if (!list) return;
   const tbody = document.querySelector('#voicesTable tbody');
   tbody.innerHTML = '';
   list.forEach(v => {
@@ -1263,8 +1275,8 @@ document.getElementById('vf_save').addEventListener('click', async () => {
   fd.append('audio',      file);
   fd.append('name',       document.getElementById('vf_name').value || file.name);
   fd.append('is_default', document.getElementById('vf_default').checked ? '1' : '0');
-  const res = await fetch('/admin/voices', {method:'POST', body: fd});
-  const data = await res.json();
+  const data = await safeFetchJSON('/admin/voices', {method:'POST', body: fd});
+  if (!data) { prog.textContent = 'Erro: resposta inválida do servidor'; return; }
   if (data.error) { prog.textContent = 'Erro: ' + data.error; return; }
   prog.textContent = 'Salvo com sucesso!';
   document.getElementById('voiceForm').classList.remove('open');
@@ -1273,8 +1285,8 @@ document.getElementById('vf_save').addEventListener('click', async () => {
 });
 
 async function setDefaultVoice(id) {
-  const res  = await fetch('/admin/voices');
-  const list = await res.json();
+  const list = await safeFetchJSON('/admin/voices');
+  if (!list) return;
   const v    = list.find(x => x.id === id); if (!v) return;
   await fetch(`/admin/voices/${id}`, {
     method:'PUT', headers:{'Content-Type':'application/json'},
