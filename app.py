@@ -96,7 +96,12 @@ print("VAD pronto.", flush=True)
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def take_screenshot() -> str:
-    img = ImageGrab.grab(); buf = io.BytesIO()
+    """Returns base64 PNG or raises RuntimeError if no display available."""
+    try:
+        img = ImageGrab.grab()
+    except Exception as e:
+        raise RuntimeError(f"Screenshot indisponível (sem display): {e}") from e
+    buf = io.BytesIO()
     img.save(buf, "PNG"); buf.seek(0)
     return base64.b64encode(buf.read()).decode()
 
@@ -195,17 +200,23 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
 
         if vision_on:
             print("  [vis] Capturando screenshot...", flush=True)
-            img_b64 = take_screenshot()
-            lm_url  = f"{provider['base_url']}/api/v1/chat"
-            lm_body = {
-                "model": provider["model"], "system_prompt": sys_prompt,
-                "input": [
-                    {"type": "text",  "content": f"{transcript}\n\n[Screenshot da tela anexado]"},
-                    {"type": "image", "data_url": f"data:image/png;base64,{img_b64}"},
-                ],
-                "max_output_tokens": max_tok, "temperature": temp,
-            }
-        else:
+            try:
+                img_b64 = take_screenshot()
+                lm_url  = f"{provider['base_url']}/api/v1/chat"
+                lm_body = {
+                    "model": provider["model"], "system_prompt": sys_prompt,
+                    "input": [
+                        {"type": "text",  "content": f"{transcript}\n\n[Screenshot da tela anexado]"},
+                        {"type": "image", "data_url": f"data:image/png;base64,{img_b64}"},
+                    ],
+                    "max_output_tokens": max_tok, "temperature": temp,
+                }
+            except RuntimeError as e:
+                print(f"  [vis] {e} — continuando sem imagem", flush=True)
+                broadcast("error", {"api": "Visão", "status": None,
+                                    "detail": str(e) + " — respondendo sem screenshot."})
+                vision_on = False  # cai no bloco text-only abaixo
+        if not vision_on:
             lm_url  = f"{provider['base_url']}/v1/chat/completions"
             lm_body = {
                 "model": provider["model"],
