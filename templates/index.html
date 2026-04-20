@@ -269,6 +269,104 @@
                    border-radius:7px; color:#888; cursor:pointer; font-size:0.85rem; }
     .chk-row { display:flex; align-items:center; gap:8px; font-size:0.85rem; color:#aaa; }
     .chk-row input { width:16px; height:16px; cursor:pointer; }
+
+    /* ── Mobile ──────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+
+      /* Topbar: empilha em duas linhas */
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 10px 14px;
+        gap: 8px;
+      }
+      .topbar-left {
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: space-between;
+      }
+      .topbar-left span { display: none; } /* esconde labels "Provedor:" e "Voz:" */
+      #providerSel, #voiceSel {
+        flex: 1; min-width: 120px; max-width: 100%;
+        font-size: 0.8rem; padding: 6px 8px;
+      }
+      .topbar-right {
+        display: flex; align-items: center;
+        justify-content: space-between; gap: 6px;
+      }
+      .user-badge { font-size: 0.72rem; padding: 3px 8px; }
+      .agent-tag  { font-size: 0.72rem; padding: 3px 7px; margin-left: 0; }
+      .btn-logout { font-size: 0.75rem; padding: 5px 10px; }
+      .btn-icon   { font-size: 0.9rem; padding: 5px 9px; }
+
+      /* Main area */
+      .app { padding: 28px 16px; gap: 20px; }
+
+      /* Play button maior para toque */
+      .btn-play {
+        width: 86px; height: 86px;
+        font-size: 2rem;
+      }
+
+      /* Info boxes */
+      .info-box {
+        padding: 14px 16px; font-size: 0.88rem;
+      }
+
+      /* Greeting */
+      .greeting { font-size: 0.95rem; }
+
+      /* Modal: fullscreen no mobile */
+      .modal-overlay {
+        padding: 0;
+        align-items: flex-end;
+      }
+      .modal {
+        border-radius: 18px 18px 0 0;
+        max-height: 92vh;
+        max-width: 100%;
+        width: 100%;
+      }
+      .modal-header { padding: 14px 18px; }
+      .modal-header h2 { font-size: 1rem; }
+
+      /* Tabs: scroll horizontal */
+      .tabs {
+        overflow-x: auto; flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding: 10px 12px 0;
+        gap: 2px;
+      }
+      .tab { font-size: 0.78rem; padding: 7px 12px; white-space: nowrap; }
+
+      /* Tab body */
+      .tab-body { padding: 16px 14px; }
+
+      /* Settings grid já vira 1 coluna via media existente (≤540px) */
+
+      /* Mini form grid */
+      .mini-form-grid { grid-template-columns: 1fr; }
+      .mini-form { padding: 12px; }
+
+      /* Tabelas: scroll horizontal */
+      .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .tbl { min-width: 480px; font-size: 0.78rem; }
+      .tbl th, .tbl td { padding: 8px 10px; }
+
+      /* Botões de ação */
+      .btn-sm { font-size: 0.72rem; padding: 4px 8px; }
+      .btn-save { width: 100%; }
+      .btn-add  { width: 100%; text-align: center; }
+
+      /* Checkboxes lado a lado no form de provider */
+      .chk-row { font-size: 0.8rem; }
+
+      /* Error toast */
+      .error-toast { min-width: unset; width: 92%; bottom: 16px; }
+
+      /* Agent modal */
+      .agent-modal { padding: 24px 20px; }
+    }
   </style>
 </head>
 <body>
@@ -376,10 +474,10 @@
             <button class="btn-cancel" id="pf_cancel">Cancelar</button>
           </div>
         </div>
-        <table class="tbl" id="providersTable">
+        <div class="tbl-wrap"><table class="tbl" id="providersTable">
           <thead><tr><th>Nome</th><th>Modelo</th><th>Visão</th><th>Ativo</th><th>Ações</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
 
       <!-- VOICES -->
@@ -400,10 +498,10 @@
           </div>
           <p id="vf_progress" style="font-size:.8rem;color:#888;margin-top:8px;"></p>
         </div>
-        <table class="tbl" id="voicesTable">
+        <div class="tbl-wrap"><table class="tbl" id="voicesTable">
           <thead><tr><th>Nome</th><th>Padrão</th><th>Ativo</th><th>Ações</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
 
       <!-- USERS -->
@@ -423,10 +521,10 @@
             <button class="btn-cancel" id="uf_cancel">Cancelar</button>
           </div>
         </div>
-        <table class="tbl" id="usersTable">
+        <div class="tbl-wrap"><table class="tbl" id="usersTable">
           <thead><tr><th>Usuário</th><th>Tipo</th><th>Ações</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
 
     </div>
