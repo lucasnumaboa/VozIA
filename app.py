@@ -321,8 +321,14 @@ def _vad_loop(provider_id: int, voice_id: int = None):
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
                             blocksize=CHUNK_SIZE, callback=cb):
             while _vad_running: time.sleep(0.05)
+    except sd.PortAudioError as e:
+        broadcast("error", {"api": "Microfone", "status": None,
+                             "detail": "Nenhum dispositivo de áudio encontrado no servidor. "
+                                       "O microfone deve estar conectado à máquina onde a aplicação roda."})
+        print(f"  [!] PortAudio: {e}", flush=True)
     except Exception as e:
-        broadcast("error", str(e))
+        broadcast("error", {"api": "VAD", "status": None, "detail": str(e)})
+        print(f"  [!] VAD erro: {e}", flush=True)
     finally:
         _vad_model.reset_states(); broadcast("status", "stopped")
 
