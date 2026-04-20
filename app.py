@@ -490,6 +490,20 @@ def serve_icon():
         "icon.png"
     )
 
+@app.route("/static/icon-original.png")
+def serve_icon_original():
+    return send_from_directory(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagens"),
+        "icon-original.png"
+    )
+
+@app.route("/static/icon-miss.png")
+def serve_icon_miss():
+    return send_from_directory(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagens"),
+        "icon-miss.png"
+    )
+
 @app.route("/")
 @login_required
 def index():

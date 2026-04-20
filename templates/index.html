@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Assistente IA</title>
+  <link rel="icon" id="favicon" href="/static/icon-original.png" type="image/png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
     body {
@@ -858,16 +859,28 @@ function startSSE() {
 
 // ── Wake hint ────────────────────────────────────────────────────────
 let _wakeTimer = null;
+const _FAVICON_ORIGINAL = '/static/icon-original.png';
+const _FAVICON_MISS     = '/static/icon-miss.png';
+
+function _setFavicon(href) {
+  const link = document.getElementById('favicon');
+  if (link) link.href = href;
+}
+
 function showWakeHint(agentName) {
   const el  = document.getElementById('wakeHint');
   const msg = document.getElementById('wakeHintMsg');
   msg.textContent = `Fale o nome "${agentName}" para que eu possa responder.`;
   el.style.display = 'block';
   el.style.animation = 'none';
-  void el.offsetWidth; // reflow para reiniciar animação
+  void el.offsetWidth;
   el.style.animation = 'fadeInDown .25s ease';
+  _setFavicon(_FAVICON_MISS);
   if (_wakeTimer) clearTimeout(_wakeTimer);
-  _wakeTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
+  _wakeTimer = setTimeout(() => {
+    el.style.display = 'none';
+    _setFavicon(_FAVICON_ORIGINAL);
+  }, 4000);
 }
 
 // ── Error Toast ──────────────────────────────────────────────────────
