@@ -758,7 +758,6 @@ if (adminBtn) {
   adminBtn.addEventListener('click', () => { overlay.classList.add('open'); loadAdmin(); });
 }
 closeBtn.addEventListener('click', () => overlay.classList.remove('open'));
-overlay.addEventListener('click', e => { if (e.target===overlay) overlay.classList.remove('open'); });
 
 // Tabs
 document.querySelectorAll('.tab').forEach(t => {
@@ -786,20 +785,28 @@ async function loadSettings() {
   const data = await res.json();
   const grid = document.getElementById('settingsGrid');
   grid.innerHTML = '';
+  const WHISPER_MODELS = ['tiny','base','small','medium','large','turbo'];
   for (const [k, v] of Object.entries(data)) {
     if (!(k in SETTING_LABELS)) continue;
     const label = SETTING_LABELS[k];
     const full  = k === 'system_prompt';
-    const el    = full
-      ? `<textarea id="s_${k}">${v}</textarea>`
-      : `<input id="s_${k}" value="${String(v).replace(/"/g,'&quot;')}" />`;
+    let el;
+    if (k === 'whisper_model') {
+      const opts = WHISPER_MODELS.map(m =>
+        `<option value="${m}"${m===String(v)?' selected':''}>${m}</option>`).join('');
+      el = `<select id="s_${k}">${opts}</select>`;
+    } else if (full) {
+      el = `<textarea id="s_${k}">${v}</textarea>`;
+    } else {
+      el = `<input id="s_${k}" value="${String(v).replace(/"/g,'&quot;')}" />`;
+    }
     grid.innerHTML += `<div class="field${full?' full':''}"><label>${label}</label>${el}</div>`;
   }
 }
 
 document.getElementById('saveSettings').addEventListener('click', async () => {
   const payload = {};
-  document.querySelectorAll('#settingsGrid input, #settingsGrid textarea').forEach(el => {
+  document.querySelectorAll('#settingsGrid input, #settingsGrid textarea, #settingsGrid select').forEach(el => {
     payload[el.id.replace(/^s_/,'')] = el.value;
   });
   await fetch('/admin/settings', {
