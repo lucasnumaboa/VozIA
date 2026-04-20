@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VozIA.Desktop.Views.MainWindow"
+        Title="VozIA"
+        Width="520" Height="560"
+        WindowStartupLocation="CenterScreen"
+        Background="#0d0d0d"
+        Closing="OnClosing">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="24">
+
+    <!-- Top bar -->
+    <Border Grid.Row="0" Background="#151515" CornerRadius="12"
+            Padding="16" Margin="0,0,0,16"
+            BorderBrush="#2a2a2a" BorderThickness="1">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Image Source="/Assets/icon.png" Width="36" Height="36" />
+        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+          <TextBlock x:Name="LblAgent" Text="Agente: ..." FontSize="14"
+                     FontWeight="SemiBold" Foreground="#e0e0e0" />
+          <TextBlock x:Name="LblStatus" Text="Parado" FontSize="11"
+                     Foreground="#888" />
+        </StackPanel>
+        <Button Grid.Column="2" x:Name="BtnToggle" Content="▶ Iniciar"
+                Background="#6c5ce7" Foreground="White" CornerRadius="8"
+                Padding="14,8" FontWeight="SemiBold"
+                Click="OnToggle" />
+      </Grid>
+    </Border>
+
+    <!-- Content -->
+    <Border Grid.Row="1" Background="#151515" CornerRadius="12"
+            Padding="20" BorderBrush="#2a2a2a" BorderThickness="1">
+      <StackPanel Spacing="16">
+
+        <!-- Provider selector -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Provedor" FontSize="11" Foreground="#888" />
+          <ComboBox x:Name="CbProvider" Foreground="#e0e0e0"
+                    Background="#1e1e1e" HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <!-- Voice selector -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Voz" FontSize="11" Foreground="#888" />
+          <ComboBox x:Name="CbVoice" Foreground="#e0e0e0"
+                    Background="#1e1e1e" HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <Border Height="1" Background="#2a2a2a" Margin="0,4" />
+
+        <!-- Transcript -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="VOCÊ DISSE" FontSize="10" Foreground="#666"
+                     LetterSpacing="1" />
+          <TextBlock x:Name="LblTranscript" Text="—" FontSize="13"
+                     Foreground="#ccc" TextWrapping="Wrap" MaxHeight="60" />
+        </StackPanel>
+
+        <!-- AI response -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="RESPOSTA DA IA" FontSize="10" Foreground="#666"
+                     LetterSpacing="1" />
+          <TextBlock x:Name="LblAiText" Text="—" FontSize="13"
+                     Foreground="#8be9fd" TextWrapping="Wrap" MaxHeight="120" />
+        </StackPanel>
+
+        <!-- Wake hint -->
+        <TextBlock x:Name="LblWakeHint" Text="" FontSize="11"
+                   Foreground="#ffb86c" TextWrapping="Wrap"
+                   IsVisible="False" />
+
+      </StackPanel>
+    </Border>
+
+    <!-- Footer -->
+    <TextBlock Grid.Row="2" Text="Minimize para a bandeja do sistema"
+               FontSize="10" Foreground="#555" Margin="0,8,0,0"
+               HorizontalAlignment="Center" />
+  </Grid>
+</Window>

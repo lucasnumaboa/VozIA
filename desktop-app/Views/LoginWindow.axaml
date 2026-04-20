@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VozIA.Desktop.Views.LoginWindow"
+        Title="VozIA — Login"
+        Width="420" Height="480"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        Background="#0d0d0d">
+
+  <Border CornerRadius="16" Background="#151515" Margin="32"
+          Padding="32" BorderBrush="#2a2a2a" BorderThickness="1">
+    <StackPanel Spacing="18" VerticalAlignment="Center">
+
+      <Image Source="/Assets/icon.png" Width="80" Height="80"
+             HorizontalAlignment="Center" Margin="0,0,0,8" />
+
+      <TextBlock Text="VozIA" FontSize="22" FontWeight="Bold"
+                 Foreground="#e0e0e0" HorizontalAlignment="Center" />
+
+      <TextBox x:Name="TxtServer" Watermark="Endereço do servidor"
+               Text="http://localhost:5000"
+               Foreground="#e0e0e0" Background="#1e1e1e" />
+
+      <TextBox x:Name="TxtUser" Watermark="Usuário"
+               Foreground="#e0e0e0" Background="#1e1e1e" />
+
+      <TextBox x:Name="TxtPass" Watermark="Senha"
+               PasswordChar="●"
+               Foreground="#e0e0e0" Background="#1e1e1e" />
+
+      <TextBlock x:Name="LblError" Foreground="#ff5555"
+                 FontSize="12" TextWrapping="Wrap"
+                 HorizontalAlignment="Center" />
+
+      <Button x:Name="BtnLogin" Content="Entrar"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center"
+              Background="#6c5ce7" Foreground="White"
+              FontWeight="SemiBold" Padding="12"
+              CornerRadius="8"
+              Click="OnLogin" />
+
+    </StackPanel>
+  </Border>
+</Window>
