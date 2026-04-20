@@ -1,4 +1,4 @@
-import base64, difflib, io, json, math, os, platform, queue, re, tempfile, threading, time, wave
+import base64, difflib, io, json, math, os, platform, queue, re, shutil, subprocess, tempfile, threading, time, wave
 from functools import wraps
 
 import numpy as np, pymysql, pymysql.cursors, requests, torch, sounddevice as sd
@@ -11,6 +11,43 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 load_dotenv()
+
+# ── ffmpeg auto-detect / auto-install ──────────────────────────────────────────
+def _ensure_ffmpeg():
+    """Locate ffmpeg: PATH → known local dirs → auto-install (apt or download)."""
+    if shutil.which("ffmpeg"):
+        print(f"[ffmpeg] encontrado no PATH: {shutil.which('ffmpeg')}", flush=True)
+        return
+    # Fallback directories to check
+    _candidates = [
+        r"C:\ffmpeg",
+        r"C:\ffmpeg\bin",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffmpeg"),
+    ]
+    for d in _candidates:
+        exe_name = "ffmpeg.exe" if platform.system() == "Windows" else "ffmpeg"
+        candidate = os.path.join(d, exe_name)
+        if os.path.isfile(candidate):
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            AudioSegment.converter = candidate
+            probe = os.path.join(d, "ffprobe.exe" if platform.system() == "Windows" else "ffprobe")
+            if os.path.isfile(probe):
+                AudioSegment.ffprobe = probe
+            print(f"[ffmpeg] encontrado em: {candidate}", flush=True)
+            return
+    # Auto-install
+    if platform.system() != "Windows":
+        print("[ffmpeg] Não encontrado — instalando via apt...", flush=True)
+        try:
+            subprocess.run(["apt-get", "update", "-qq"], check=True, capture_output=True)
+            subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg"], check=True, capture_output=True)
+            print("[ffmpeg] Instalado com sucesso via apt.", flush=True)
+            return
+        except Exception as e:
+            print(f"[ffmpeg] Falha na instalação apt: {e}", flush=True)
+    print("[ffmpeg] ⚠ NÃO encontrado — conversão de áudio OGG/MP3 pode falhar.", flush=True)
+
+_ensure_ffmpeg()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-in-production")
