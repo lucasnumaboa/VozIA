@@ -1,4 +1,4 @@
-import base64, io, json, math, os, queue, re, tempfile, threading, time, wave
+import base64, difflib, io, json, math, os, queue, re, tempfile, threading, time, wave
 from functools import wraps
 
 import numpy as np, pymysql, pymysql.cursors, requests, torch, sounddevice as sd
@@ -128,8 +128,23 @@ def _wav_duration(b64_str: str) -> float:
     except Exception:
         return 2.0
 
+# ── Wake word ───────────────────────────────────────────────────────────────────
+def _contains_wake_word(text: str, wake_word: str, threshold: float = 0.75) -> bool:
+    """Return True if wake_word (or a fuzzy-similar token) appears in text."""
+    if not wake_word:
+        return True
+    text_l = text.lower()
+    wake_l = wake_word.lower()
+    if wake_l in text_l:
+        return True
+    for token in text_l.split():
+        clean = re.sub(r'[^\w]', '', token)
+        if clean and difflib.SequenceMatcher(None, clean, wake_l).ratio() >= threshold:
+            return True
+    return False
+
 # ── Pipeline ───────────────────────────────────────────────────────────────────
-def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, voice_path: str = ""):
+def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, voice_path: str = "", agent_name: str = ""):
     """Core pipeline shared by server VAD and browser audio upload."""
     broadcast("status", "processing")
     t_total = time.time()
@@ -164,6 +179,12 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
         print(f'  [>] "{transcript}"', flush=True)
         broadcast("transcript", transcript)
         if cancelled(): return
+
+        # Wake word check
+        if agent_name and not _contains_wake_word(transcript, agent_name):
+            print(f"  [wake] '{agent_name}' não detectado — ignorando", flush=True)
+            if not _cancel_event.is_set(): broadcast("status", "listening")
+            return
 
         # 2 ── LLM ─────────────────────────────────────────────────────────────
         vision_on = (os.getenv("VISION", "no").lower() == "yes") and bool(provider.get("vision"))
@@ -265,9 +286,9 @@ def _run_pipeline(wav_io: io.BytesIO, my_gen: int, provider: dict, cfg: dict, vo
         if not _cancel_event.is_set(): broadcast("status", "listening")
 
 
-def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_path: str = ""):
+def process_audio(chunks: list, my_gen: int, provider: dict, cfg: dict, voice_path: str = "", agent_name: str = ""):
     """Server-side mic path: convert numpy chunks to WAV then run pipeline."""
-    _run_pipeline(chunks_to_wav(chunks), my_gen, provider, cfg, voice_path)
+    _run_pipeline(chunks_to_wav(chunks), my_gen, provider, cfg, voice_path, agent_name)
 
 # ── VAD loop ───────────────────────────────────────────────────────────────────
 def _vad_loop(provider_id: int, voice_id: int = None):
@@ -453,6 +474,21 @@ def admin_user(uid):
             (d["username"], d["role"], uid))
     return jsonify({"ok": True})
 
+# ── Agent name ─────────────────────────────────────────────────────────────────
+@app.route("/api/agent", methods=["GET", "PUT"])
+@login_required
+def api_agent():
+    uid = session["user_id"]
+    if request.method == "GET":
+        row = q1("SELECT agent_name FROM agent_settings WHERE user_id=%s", (uid,))
+        return jsonify({"agent_name": row["agent_name"] if row else ""})
+    name = (request.json or {}).get("agent_name", "").strip()
+    if not name:
+        return jsonify({"error": "nome inválido"}), 400
+    exe("INSERT INTO agent_settings (user_id, agent_name) VALUES (%s,%s) "
+        "ON DUPLICATE KEY UPDATE agent_name=%s", (uid, name, name))
+    return jsonify({"ok": True, "agent_name": name})
+
 # ── Browser audio upload ───────────────────────────────────────────────────────
 @app.route("/api/audio", methods=["POST"])
 @login_required
@@ -483,8 +519,13 @@ def api_audio():
     _pipeline_gen += 1
     gen = _pipeline_gen
     _cancel_event.clear()
+    try:
+        arow = q1("SELECT agent_name FROM agent_settings WHERE user_id=%s", (session["user_id"],))
+        agent_name = arow["agent_name"] if arow else ""
+    except Exception:
+        agent_name = ""
     threading.Thread(target=_run_pipeline,
-                     args=(wav_io, gen, provider, cfg, voice_path),
+                     args=(wav_io, gen, provider, cfg, voice_path, agent_name),
                      daemon=True).start()
     return jsonify({"ok": True, "gen": gen})
 

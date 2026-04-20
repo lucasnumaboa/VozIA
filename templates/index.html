@@ -92,7 +92,44 @@
                        letter-spacing:1px; margin-bottom:6px; }
     .info-box .content { color:#ddd; }
 
-    /* ── Error Toast ─────────────────────────────────────── */
+    /* ── Greeting ────────────────────────────── */
+    .greeting {
+      text-align:center; margin-bottom:14px;
+      font-size:1rem; color:#888; line-height:1.5;
+    }
+    .greeting strong { color:#ccc; }
+
+    /* ── Agent tag (topbar) ──────────────────── */
+    .agent-tag {
+      font-size:.8rem; color:#888; cursor:pointer;
+      border:1px solid #2a2a2a; border-radius:6px;
+      padding:3px 9px; margin-left:10px;
+      transition:border-color .2s;
+    }
+    .agent-tag:hover { border-color:#555; color:#ccc; }
+
+    /* ── Agent setup modal ──────────────────── */
+    .agent-modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.75);
+      display:flex; align-items:center; justify-content:center;
+      z-index:10000;
+    }
+    .agent-modal-overlay.hidden { display:none; }
+    .agent-modal {
+      background:#111; border:1px solid #2a2a2a; border-radius:14px;
+      padding:32px 28px; max-width:380px; width:90%; text-align:center;
+    }
+    .agent-modal h3 { margin:0 0 10px; color:#eee; font-size:1.1rem; }
+    .agent-modal p  { color:#888; font-size:.88rem; margin:0 0 20px; }
+    .agent-modal input {
+      width:100%; padding:10px 14px; background:#1a1a1a;
+      border:1px solid #333; border-radius:8px; color:#eee;
+      font-size:1rem; box-sizing:border-box; margin-bottom:16px;
+    }
+    .agent-modal input:focus { outline:none; border-color:#4f8ef7; }
+    .agent-modal .btn-confirm { width:100%; padding:10px; font-size:.95rem; }
+
+    /* ── Error Toast ─────────────────────────────── */
     .error-toast {
       position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
       background:#1e0a0a; border:1px solid #7a2020; border-radius:12px;
@@ -245,6 +282,7 @@
     <select id="voiceSel"></select>
   </div>
   <div class="topbar-right">
+    <span class="agent-tag" id="agentTag" title="Clique para renomear o agente" onclick="openAgentModal(false)">🤖 ...</span>
     <span class="user-badge">{{ username }}</span>
     {% if role == 'admin' %}
     <button class="btn-icon" id="adminBtn" title="Configurações">⚙</button>
@@ -263,8 +301,19 @@
   <button class="et-close" onclick="closeToast()">✕</button>
 </div>
 
+<!-- Agent setup modal -->
+<div class="agent-modal-overlay hidden" id="agentOverlay">
+  <div class="agent-modal">
+    <h3 id="agentModalTitle">Como você quer chamar seu agente?</h3>
+    <p id="agentModalDesc">Dê um nome ao seu assistente. Você só será atendido quando pronunciar esse nome.</p>
+    <input type="text" id="agentNameInput" placeholder="Ex: Jarvis, Friday, Max..." maxlength="30" />
+    <button class="btn-confirm" onclick="saveAgentName()">Confirmar</button>
+  </div>
+</div>
+
 <!-- Main -->
 <div class="app">
+  <div class="greeting" id="greetingTxt">Olá! Configurando...</div>
   <div class="status-text" id="statusTxt">aguardando</div>
   <div class="bars" id="bars">
     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
@@ -434,6 +483,58 @@ document.getElementById('voiceSel').addEventListener('change', async e => {
 
 loadProviders();
 loadVoices();
+loadAgentInfo();
+
+// ── Agent name ──────────────────────────────────────────────
+const _username = '{{ username }}';
+let _agentName = '';
+
+async function loadAgentInfo() {
+  const res  = await fetch('/api/agent');
+  const data = await res.json();
+  _agentName = data.agent_name || '';
+  _updateAgentUI();
+  if (!_agentName) openAgentModal(true);
+}
+
+function _updateAgentUI() {
+  document.getElementById('agentTag').textContent =
+    _agentName ? `🤖 ${_agentName}` : '🤖 (sem nome)';
+  document.getElementById('greetingTxt').innerHTML = _agentName
+    ? `Olá, <strong>${_username}</strong>! No que <strong>${_agentName}</strong> pode lhe ajudar hoje?`
+    : `Olá, <strong>${_username}</strong>! Configure o nome do seu agente acima.`;
+}
+
+function openAgentModal(isFirstTime) {
+  document.getElementById('agentModalTitle').textContent =
+    isFirstTime ? 'Como você quer chamar seu agente?' : 'Renomear agente';
+  document.getElementById('agentModalDesc').textContent =
+    isFirstTime
+      ? 'Dê um nome ao seu assistente. Você só será atendido quando pronunciar esse nome.'
+      : `Nome atual: ${_agentName || '(vazio)'}. Você só será atendido ao dizer o nome do agente.`;
+  document.getElementById('agentNameInput').value = _agentName;
+  document.getElementById('agentOverlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('agentNameInput').focus(), 100);
+}
+
+async function saveAgentName() {
+  const name = document.getElementById('agentNameInput').value.trim();
+  if (!name) return;
+  const res  = await fetch('/api/agent', {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({agent_name: name}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    _agentName = data.agent_name;
+    _updateAgentUI();
+    document.getElementById('agentOverlay').classList.add('hidden');
+  }
+}
+
+document.getElementById('agentNameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveAgentName();
+});
 
 // ── Play / Stop ───────────────────────────────────────────────────────────────
 const playBtn   = document.getElementById('playBtn');

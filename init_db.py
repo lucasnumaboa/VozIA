@@ -91,6 +91,15 @@ def init_db():
                     value    TEXT NOT NULL
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS agent_settings (
+                    id         INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id    INT NOT NULL,
+                    agent_name VARCHAR(100) NOT NULL DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_user (user_id)
+                )
+            """)
             conn.commit()
 
             # ── Seed users ────────────────────────────────────────────────────
