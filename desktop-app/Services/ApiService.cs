@@ -88,7 +88,7 @@ public class ApiService
         catch { return null; }
     }
 
-    public async Task<string?> SendAudioAsync(byte[] wavData, int? providerId, int? voiceId)
+    public async Task<string?> SendAudioAsync(byte[] wavData, int? providerId, int? voiceId, string? screenshotB64 = null)
     {
         try
         {
@@ -98,6 +98,8 @@ public class ApiService
                 content.Add(new StringContent(providerId.Value.ToString()), "provider_id");
             if (voiceId.HasValue)
                 content.Add(new StringContent(voiceId.Value.ToString()), "voice_id");
+            if (!string.IsNullOrEmpty(screenshotB64))
+                content.Add(new StringContent(screenshotB64), "screenshot");
             var res = await _http.PostAsync($"{_baseUrl}/api/audio", content);
             return await res.Content.ReadAsStringAsync();
         }

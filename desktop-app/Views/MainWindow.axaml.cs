@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly AudioPlayerService _player = new();
     private bool _running;
     private bool _reallyClose;
+    private string? _pendingScreenshot;
 
     // Provider/voice data
     private record ComboItem(int Id, string Name);
@@ -111,12 +112,16 @@ public partial class MainWindow : Window
         if (!_running) return;
         Dispatcher.UIThread.Post(() => SetStatus("Processando..."));
         _player.Reset();
-        await App.Api.SendAudioAsync(wavData, SelectedProviderId, SelectedVoiceId);
+        var screenshot = _pendingScreenshot;
+        _pendingScreenshot = null;
+        await App.Api.SendAudioAsync(wavData, SelectedProviderId, SelectedVoiceId, screenshot);
     }
 
     private void OnSpeakingChanged(bool speaking)
     {
         if (!_running) return;
+        if (speaking)
+            _pendingScreenshot = ScreenCaptureService.CaptureScreenBase64();
         Dispatcher.UIThread.Post(() =>
             SetStatus(speaking ? "Gravando..." : "Processando..."));
     }
@@ -146,7 +151,7 @@ public partial class MainWindow : Window
                     LblWakeHint.Text = $"Fale o nome \"{data}\" para que eu possa responder.";
                     LblWakeHint.IsVisible = true;
                     _ = HideWakeHintAsync();
-                    try { Console.Beep(480, 250); } catch { }
+                    BeepService.PlayBeep();
                     break;
                 case "audio_chunk":
                     HandleAudioChunk(data);
