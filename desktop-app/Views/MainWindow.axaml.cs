@@ -195,6 +195,22 @@ public partial class MainWindow : Window
         _sse.Stop();
     }
 
+    private void OnLogout(object? sender, RoutedEventArgs e)
+    {
+        if (_running)
+        {
+            _running = false;
+            _audio.Stop();
+            _sse.Stop();
+        }
+        CredentialStore.Delete();
+        _reallyClose = true;
+        var login = new LoginWindow();
+        login.Show();
+        App.Main = null;
+        Close();
+    }
+
     public void ForceClose()
     {
         _reallyClose = true;

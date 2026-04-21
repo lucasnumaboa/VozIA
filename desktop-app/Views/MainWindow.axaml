@@ -74,8 +74,13 @@
     </Border>
 
     <!-- Footer -->
-    <TextBlock Grid.Row="2" Text="Minimize para a bandeja do sistema"
-               FontSize="10" Foreground="#555" Margin="0,8,0,0"
-               HorizontalAlignment="Center" />
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+      <TextBlock Text="Minimize para a bandeja do sistema"
+                 FontSize="10" Foreground="#555" VerticalAlignment="Center" />
+      <Button Grid.Column="1" x:Name="BtnLogout" Content="Sair"
+              Background="#333" Foreground="#ccc" CornerRadius="6"
+              Padding="14,6" FontSize="11"
+              Click="OnLogout" />
+    </Grid>
   </Grid>
 </Window>
