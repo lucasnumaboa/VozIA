@@ -110,11 +110,18 @@ public partial class MainWindow : Window
     private async void OnSpeechComplete(byte[] wavData)
     {
         if (!_running) return;
-        Dispatcher.UIThread.Post(() => SetStatus("Processando..."));
+        bool listenAll = false;
+        Dispatcher.UIThread.Post(() =>
+        {
+            SetStatus("Processando...");
+            listenAll = ChkListenAll.IsChecked == true;
+        });
         _player.Reset();
         var screenshot = _pendingScreenshot;
         _pendingScreenshot = null;
-        await App.Api.SendAudioAsync(wavData, SelectedProviderId, SelectedVoiceId, screenshot);
+        // Small delay to let UI thread set listenAll
+        await Task.Delay(10);
+        await App.Api.SendAudioAsync(wavData, SelectedProviderId, SelectedVoiceId, screenshot, listenAll);
     }
 
     private void OnSpeakingChanged(bool speaking)

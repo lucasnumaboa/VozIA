@@ -379,6 +379,10 @@
     <select id="providerSel"></select>
     <span style="font-size:.8rem;color:#555;margin-right:4px;margin-left:12px;">Voz:</span>
     <select id="voiceSel"></select>
+    <label style="margin-left:14px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:.78rem;color:#aaa;" title="Se marcado, o modelo responde a tudo que você disser, sem precisar falar o nome dele.">
+      <input type="checkbox" id="listenAllChk" style="accent-color:#6c5ce7;" />
+      Ouvir 100%
+    </label>
   </div>
   <div class="topbar-right">
     <span class="agent-tag" id="agentTag" title="Clique para renomear o agente" onclick="openAgentModal(false)">🤖 ...</span>
@@ -754,6 +758,7 @@ async function _sendAudio(chunks) {
   fd.append('audio', blob, 'rec.wav');
   if (selectedProviderId) fd.append('provider_id', selectedProviderId);
   if (selectedVoiceId)    fd.append('voice_id', selectedVoiceId);
+  if (document.getElementById('listenAllChk').checked) fd.append('listen_all', '1');
   if (_pendingScreenshot) { fd.append('screenshot', _pendingScreenshot); _pendingScreenshot = null; }
   try {
     const res  = await fetch('/api/audio', {method:'POST', body:fd});

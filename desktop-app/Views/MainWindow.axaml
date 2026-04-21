@@ -47,6 +47,11 @@
                     Background="#1e1e1e" HorizontalAlignment="Stretch" />
         </StackPanel>
 
+        <!-- Listen all -->
+        <CheckBox x:Name="ChkListenAll" Foreground="#aaa" FontSize="12"
+                  Content="Ouvir 100%"
+                  ToolTip.Tip="Se marcado, o modelo responde a tudo que você disser, sem precisar falar o nome dele." />
+
         <Border Height="1" Background="#2a2a2a" Margin="0,4" />
 
         <!-- Transcript -->

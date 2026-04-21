@@ -685,6 +685,9 @@ def api_audio():
         agent_name = arow["agent_name"] if arow else ""
     except Exception:
         agent_name = ""
+    listen_all = request.form.get("listen_all", "0")
+    if listen_all == "1":
+        agent_name = ""
     screenshot_b64 = request.form.get("screenshot", "")
     threading.Thread(target=_run_pipeline,
                      args=(wav_io, gen, provider, cfg, voice_path, agent_name, screenshot_b64),
