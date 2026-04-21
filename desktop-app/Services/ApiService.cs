@@ -111,7 +111,7 @@ public class ApiService
     {
         try
         {
-            var req = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/api/events");
+            var req = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/events");
             var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
             if (res.IsSuccessStatusCode)
                 return await res.Content.ReadAsStreamAsync();
